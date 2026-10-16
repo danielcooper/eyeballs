@@ -157,7 +157,8 @@ struct NoticeBanner: View {
     }
 }
 
-/// The toolbar's way through the stack: the layer below, the layer above, and every layer by name.
+/// The toolbar's way through the stack, drawn top first like the sidebar: the layer above,
+/// every layer by name, and the layer below.
 struct LayerNavigator: View {
     let model: ReviewWindowModel
     let windowState: ReviewWindowState
@@ -166,16 +167,16 @@ struct LayerNavigator: View {
         if let stack = model.selectedStack, let layer = model.selectedLayer {
             ControlGroup {
                 Button {
-                    windowState.selectAdjacentLayer(-1, in: model)
+                    windowState.selectAdjacentLayer(1, in: model)
                 } label: {
-                    Label("Layer below", systemImage: "chevron.left")
+                    Label("Layer above", systemImage: "chevron.up")
                 }
-                .disabled(windowState.adjacentLayer(-1, in: model) == nil)
-                .help(helpText(for: windowState.adjacentLayer(-1, in: model), direction: "below", keys: "⇧⌘["))
+                .disabled(windowState.adjacentLayer(1, in: model) == nil)
+                .help(helpText(for: windowState.adjacentLayer(1, in: model), direction: "above", keys: "⇧⌘]"))
                 Menu {
                     ForEach(stack.layers.sorted { $0.position > $1.position }) { item in
                         Toggle(isOn: Binding(get: { item.id == layer.id }, set: { _ in model.selectLayer(atPosition: item.position) })) {
-                            Text("\(item.position) \(item.branch)")
+                            Text("Layer \(item.position) · \(item.branch)")
                         }
                     }
                 } label: {
@@ -183,12 +184,12 @@ struct LayerNavigator: View {
                 }
                 .help("Go to another layer of \(stack.name)")
                 Button {
-                    windowState.selectAdjacentLayer(1, in: model)
+                    windowState.selectAdjacentLayer(-1, in: model)
                 } label: {
-                    Label("Layer above", systemImage: "chevron.right")
+                    Label("Layer below", systemImage: "chevron.down")
                 }
-                .disabled(windowState.adjacentLayer(1, in: model) == nil)
-                .help(helpText(for: windowState.adjacentLayer(1, in: model), direction: "above", keys: "⇧⌘]"))
+                .disabled(windowState.adjacentLayer(-1, in: model) == nil)
+                .help(helpText(for: windowState.adjacentLayer(-1, in: model), direction: "below", keys: "⇧⌘["))
             }
             .fixedSize()
         }
@@ -196,6 +197,6 @@ struct LayerNavigator: View {
 
     private func helpText(for layer: LayerItem?, direction: String, keys: String) -> String {
         guard let layer else { return "There is no layer \(direction) this one" }
-        return "Go to layer \(layer.position), \(layer.branch) (\(keys))"
+        return "Go to the layer \(direction), layer \(layer.position), \(layer.branch) (\(keys))"
     }
 }

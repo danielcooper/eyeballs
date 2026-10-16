@@ -7,8 +7,8 @@ struct FooterActions {
     var finishReview: @MainActor () -> Void = {}
 }
 
-/// The last row of the pane. It says the layer has ended and offers the way on: the next
-/// layer up, a layer with threads that need you, or finishing the review.
+/// The last row of the pane. It says the layer has ended and offers the way on: the layer
+/// above, a layer with threads that need you, or finishing the review.
 struct LayerFooterView: View {
     static let height: CGFloat = 152
     static let placeholder = LayerFooterView(content: FooterContent(branch: "", nextLayer: nil, layerNeedingYou: nil), actions: FooterActions())
@@ -51,13 +51,13 @@ struct LayerFooterView: View {
 
     private var detail: String {
         var sentences: [String] = []
-        if let next = content.nextLayer {
-            sentences.append(next.needsYouCount > 0
-                ? "Next: \(next.position) \(next.branch), where \(Self.needYou(next.needsYouCount))."
-                : "Next: \(next.position) \(next.branch).")
+        if let above = content.nextLayer {
+            sentences.append(above.needsYouCount > 0
+                ? "The layer above is \(above.branch), where \(Self.needYou(above.needsYouCount))."
+                : "The layer above is \(above.branch).")
         }
         if let other = content.layerNeedingYou {
-            sentences.append("\(Self.needYou(other.needsYouCount)) on \(other.position) \(other.branch).")
+            sentences.append("\(Self.needYou(other.needsYouCount)) in layer \(other.position), \(other.branch).")
         } else if content.nextLayer == nil {
             sentences.append("Finish the review when you're ready.")
         }
@@ -66,13 +66,13 @@ struct LayerFooterView: View {
 
     @ViewBuilder
     private var action: some View {
-        if let next = content.nextLayer {
+        if let above = content.nextLayer {
             Button {
-                actions.showLayer(next.position)
+                actions.showLayer(above.position)
             } label: {
-                Label("Next layer", systemImage: "arrow.up")
+                Label("Layer above: \(above.branch)", systemImage: "arrow.up")
             }
-            .help("Go to layer \(next.position), \(next.branch) (⇧⌘])")
+            .help("Go to layer \(above.position), \(above.branch) (⇧⌘])")
         } else if let other = content.layerNeedingYou {
             Button("Go to \(other.branch)") { actions.showLayer(other.position) }
                 .help("Go to layer \(other.position), \(other.branch)")
