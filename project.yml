@@ -13,6 +13,9 @@ packages:
   ArgumentParser:
     url: https://github.com/apple/swift-argument-parser.git
     exactVersion: "1.8.2"
+  GRDB:
+    url: https://github.com/groue/GRDB.swift.git
+    exactVersion: "7.11.1"
 
 settings:
   base:
@@ -38,6 +41,8 @@ targets:
     sources:
       - Eyeballs
     dependencies:
+      # libEyeballsStore.a carries GRDB and EyeballsKit. Listing either here too links it twice.
+      - target: EyeballsStore
       - package: EyeballsCore
         product: EyeballsCore
       - target: eyeballs-cli
@@ -69,6 +74,37 @@ targets:
           PRODUCT_BUNDLE_IDENTIFIER: coops.eyeballs.debug
           INFOPLIST_KEY_CFBundleDisplayName: Eyeballs Debug
 
+  EyeballsStore:
+    type: library.static
+    platform: macOS
+    sources:
+      - path: Store
+        excludes:
+          - Migrations.lock
+      - path: Store/Migrations.lock
+        buildPhase: none
+    dependencies:
+      - package: EyeballsCore
+        product: EyeballsKit
+        link: true
+      - package: GRDB
+        link: true
+
+  EyeballsStoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/StoreTests
+    dependencies:
+      # libEyeballsStore.a carries GRDB and EyeballsKit. Listing either here too links it twice.
+      - target: EyeballsStore
+      - package: EyeballsCore
+        product: EyeballsCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: coops.eyeballs.store-tests
+        GENERATE_INFOPLIST_FILE: YES
+
   eyeballs-cli:
     type: tool
     platform: macOS
@@ -96,4 +132,8 @@ schemes:
         Eyeballs: all
     test:
       targets:
+        - EyeballsStoreTests
         - package: EyeballsCore/EyeballsCoreTests
+    profile:
+      environmentVariables:
+        EYEBALLS_HOME: /tmp/eyeballs-profile

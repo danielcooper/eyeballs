@@ -1,0 +1,2 @@
+# The SHA-256 of each shipped migration's SQL. Never change a line: add a new migration and a new line.
+v1 60888a5ec5e388b06090822aee0539ec054589f99eaef91a11aabcd5604597c4
