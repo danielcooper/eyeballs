@@ -264,7 +264,7 @@ struct ResolvedThreadBar: View {
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.secondary)
                 Text("·").foregroundStyle(.tertiary)
-                Text(firstWords)
+                Text(MarkdownText.attributed(firstWords))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -282,6 +282,6 @@ struct ResolvedThreadBar: View {
         }
         .buttonStyle(.plain)
         .help("Show this resolved thread")
-        .accessibilityLabel("Resolved thread t\(content.thread.id): \(firstWords). Show it.")
+        .accessibilityLabel("Resolved thread t\(content.thread.id): \(String(MarkdownText.attributed(firstWords).characters)). Show it.")
     }
 }

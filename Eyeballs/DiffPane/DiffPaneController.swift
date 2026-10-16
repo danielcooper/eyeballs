@@ -106,13 +106,15 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
             show(layer)
             return
         }
+        var gutterChanged = false
         if layer.files != shownLayer?.files {
             prepared = PreparedLayer(files: layer.files)
             tokenCache.removeAll()
-            if metrics.fitNumbers(upTo: prepared.largestLineNumber) { widthUsedForHeights = 0 }
+            gutterChanged = metrics.fitNumbers(upTo: prepared.largestLineNumber)
         }
         shownLayer = layer
         rebuild()
+        if gutterChanged { recomputeAllHeights() }
     }
 
     // MARK: Showing a layer
@@ -260,8 +262,13 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
     func widthDidChange() {
         let width = tableView.bounds.width
         guard width > 1, abs(width - widthUsedForHeights) >= 1 else { return }
-        let start = ProcessInfo.processInfo.systemUptime
         widthUsedForHeights = width
+        recomputeAllHeights()
+    }
+
+    /// Works out every row's height afresh, for a new width or a wider line-number gutter.
+    func recomputeAllHeights() {
+        let start = ProcessInfo.processInfo.systemUptime
         heights = rows.map(height(of:))
         noteHeightChanges(IndexSet(integersIn: 0..<rows.count))
         redrawVisibleRows()
