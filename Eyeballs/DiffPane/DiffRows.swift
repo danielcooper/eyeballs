@@ -225,7 +225,6 @@ struct PreparedLine {
     var changedRange: NSRange?
 }
 
-/// Builds the table's rows for one layer.
 struct DiffRowBuilder {
     var prepared: PreparedLayer
     var layer: LayerContent

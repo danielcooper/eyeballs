@@ -25,6 +25,9 @@ final class ComposerRowView: NSView, NSTextViewDelegate {
     weak var pane: DiffPaneController?
     private(set) var content: ComposerRowContent?
     let textView = ComposerTextView()
+    /// Typing undo stays with this composer. In the window's undo manager it would outlive the
+    /// row, and a recycled row could then undo into another composer's text.
+    private let typingUndo = UndoManager()
     private let titleLabel = NSTextField(labelWithString: "")
     private let hintLabel = NSTextField(labelWithString: "Markdown works: `code`, **bold**, lists and links.")
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
@@ -66,7 +69,7 @@ final class ComposerRowView: NSView, NSTextViewDelegate {
         cancelButton.bezelStyle = .push
         cancelButton.target = self
         cancelButton.action = #selector(cancelPressed)
-        cancelButton.toolTip = "Close and keep the draft (Esc)"
+        cancelButton.toolTip = "Discard this comment. Edit > Undo brings it back. Esc closes it and keeps the draft."
         sendNowButton.bezelStyle = .push
         sendNowButton.target = self
         sendNowButton.action = #selector(sendNowPressed)
@@ -86,6 +89,7 @@ final class ComposerRowView: NSView, NSTextViewDelegate {
     required init?(coder: NSCoder) { fatalError("ComposerRowView is built in code") }
 
     func show(_ content: ComposerRowContent, text: String, pane: DiffPaneController) {
+        if self.content?.key != content.key { typingUndo.removeAllActions() }
         self.content = content
         self.pane = pane
         titleLabel.stringValue = content.title
@@ -203,6 +207,10 @@ final class ComposerRowView: NSView, NSTextViewDelegate {
 
     // MARK: Actions
 
+    func undoManager(for view: NSTextView) -> UndoManager? {
+        typingUndo
+    }
+
     func textDidChange(_ notification: Notification) {
         guard let key = content?.key else { return }
         pane?.composerTextDidChange(textView.string, for: key)
@@ -213,7 +221,10 @@ final class ComposerRowView: NSView, NSTextViewDelegate {
         pane?.flushDraft(for: key)
     }
 
-    @objc private func cancelPressed() { cancel() }
+    @objc private func cancelPressed() {
+        guard let key = content?.key else { return }
+        pane?.discardComposer(key)
+    }
     @objc private func sendNowPressed() { submit(sendNow: true) }
     @objc private func submitPressed() { submit(sendNow: false) }
 

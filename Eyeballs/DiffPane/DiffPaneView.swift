@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Puts the AppKit diff pane in the SwiftUI window.
 struct DiffPaneView: NSViewControllerRepresentable {
     let model: ReviewWindowModel
     let windowState: ReviewWindowState

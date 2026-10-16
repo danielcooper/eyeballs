@@ -22,6 +22,17 @@ struct TextPoint: Equatable {
     var offset: Int
 }
 
+/// What Edit > Undo needs to bring back a discarded composer.
+final class DiscardedComposer: NSObject {
+    let key: ComposerKey
+    let text: String
+
+    init(key: ComposerKey, text: String) {
+        self.key = key
+        self.text = text
+    }
+}
+
 enum DragMode: Equatable {
     case none
     case lines(opensComposer: Bool)
@@ -172,6 +183,28 @@ extension DiffPaneController {
         redrawVisibleCodeRows()
     }
 
+    /// Closes a composer and throws its draft away. Edit > Undo brings both back.
+    func discardComposer(_ key: ComposerKey) {
+        let text = draftText(for: key)
+        draftSaves[key]?.cancel()
+        draftSaves[key] = nil
+        liveDrafts[key] = nil
+        if case .draft(let draftKey) = key { model.saveDraft("", for: draftKey) }
+        viewState.openComposers.removeAll { $0 == key }
+        tableView.window?.makeFirstResponder(tableView)
+        rebuild()
+        redrawVisibleCodeRows()
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let undo = tableView.window?.undoManager else { return }
+        undo.registerUndo(withTarget: self, selector: #selector(restoreDiscardedComposer(_:)), object: DiscardedComposer(key: key, text: text))
+        undo.setActionName("Discard Comment")
+    }
+
+    @objc private func restoreDiscardedComposer(_ discarded: DiscardedComposer) {
+        liveDrafts[discarded.key] = discarded.text
+        if case .draft(let draftKey) = discarded.key { model.saveDraft(discarded.text, for: draftKey) }
+        openComposer(discarded.key)
+    }
+
     func submitComposer(_ key: ComposerKey, sendNow: Bool) {
         let text = draftText(for: key).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
@@ -251,8 +284,10 @@ extension DiffPaneController {
     func cardActions(for threadID: Int) -> ThreadCardActions {
         ThreadCardActions(
             focus: { [weak self] in
-                self?.setFocusedThread(threadID)
-                self?.tableView.window?.makeFirstResponder(self?.tableView)
+                self?.afterThisEvent { pane in
+                    pane.setFocusedThread(threadID)
+                    pane.tableView.window?.makeFirstResponder(pane.tableView)
+                }
             },
             reply: { [weak self] in self?.afterThisEvent { $0.openComposer(.draft(.reply(threadID: threadID))) } },
             setResolved: { [weak self] resolved in

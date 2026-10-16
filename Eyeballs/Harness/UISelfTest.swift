@@ -54,6 +54,7 @@ final class UISelfTest {
         await checkResizeRewraps()
         await checkShortcutsNeedTableFocus()
         await checkReviewLoop()
+        await checkCancelCanBeUndone()
     }
 
     // MARK: Checks
@@ -355,6 +356,33 @@ final class UISelfTest {
             "agent_answered": agentAnswered, "resolved_by_e": resolved, "submitted": submitted, "delivered": delivered,
             "pass": composerOpened && added && repliedNow && agentAnswered && resolved && submitted && delivered,
         ])
+    }
+
+    /// Cancel throws a draft away, Edit > Undo brings it back, and Esc closes and keeps it.
+    private func checkCancelCanBeUndone() async {
+        guard let range = lineRange(path: "Sources/Models/Order.swift", containing: "var total: Money") else {
+            return record("cancel_can_be_undone", ["pass": false, "reason": "no line to comment on"])
+        }
+        let key = ComposerKey.draft(.newThread(.lines(range)))
+        pane.openComposer(key)
+        await window.settle()
+        type("Throw this away")
+        pane.discardComposer(key)
+        await window.settle()
+        let discarded = model.draft(for: .newThread(.lines(range))).isEmpty && pane.indexByID[.composer(key)] == nil
+        window.makeFirstResponder(table)
+        // AppKit closes the undo group when a real event ends; events sent straight to the window never end one.
+        while let undo = window.undoManager, undo.groupingLevel > 0 { undo.endUndoGrouping() }
+        let canUndo = window.undoManager?.canUndo == true
+        if canUndo { window.undoManager?.undo() }
+        await window.settle()
+        let restored = pane.indexByID[.composer(key)] != nil && pane.draftText(for: key) == "Throw this away"
+        press(keyCode: 53, characters: "\u{1b}", modifiers: [])
+        await window.settle(450)
+        let keptAfterEscape = pane.indexByID[.composer(key)] == nil && model.draft(for: .newThread(.lines(range))) == "Throw this away"
+        record("cancel_can_be_undone", ["discarded": discarded, "restored_by_undo": restored, "esc_keeps_draft": keptAfterEscape,
+                                        "pass": discarded && restored && keptAfterEscape])
+        model.saveDraft("", for: .newThread(.lines(range)))
     }
 
     private func press(keyCode: UInt16, characters: String, modifiers: NSEvent.ModifierFlags) {

@@ -79,7 +79,7 @@ struct ThreadCard: View {
         .clipShape(shape)
         .overlay(shape.strokeBorder(isFocused ? Color.accentColor : Color.diffBorder, lineWidth: isFocused ? 2 : 1))
         .contentShape(shape)
-        .onTapGesture { actions.focus() }
+        .simultaneousGesture(TapGesture().onEnded { actions.focus() })
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Thread t\(thread.id), \(thread.state.label), \(content.anchorText)")
     }

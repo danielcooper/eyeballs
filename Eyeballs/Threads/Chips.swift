@@ -11,7 +11,6 @@ struct ThreadStateChip: View {
     }
 }
 
-/// The agent's reply status, such as "Addressed".
 struct ReplyStatusChip: View {
     let status: ReplyStatus
 

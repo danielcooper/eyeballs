@@ -121,6 +121,8 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
 
     private func show(_ layer: LayerContent) {
         if let shownLayerID { viewStates[shownLayerID, default: LayerViewState()].savedScroll = topVisibleAnchor() }
+        flushAllDrafts()
+        liveDrafts.removeAll()
         shownLayerID = layer.layerID
         shownLayer = layer
         prepared = PreparedLayer(files: layer.files)

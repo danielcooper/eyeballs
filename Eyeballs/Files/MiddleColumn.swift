@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// The middle column: the layer's files, or every thread on it.
 struct MiddleColumn: View {
     let model: ReviewWindowModel
     @Bindable var windowState: ReviewWindowState
