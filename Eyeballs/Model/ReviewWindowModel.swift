@@ -292,6 +292,8 @@ enum Verdict: Hashable, Sendable, CaseIterable {
 struct AgentStatus: Hashable, Sendable {
     var text: String
     var isListening: Bool
+    /// The agent's name, such as "Claude", for lines like "waiting for Claude". Nil says "the agent".
+    var agentName: String? = nil
 
     static let notListening = AgentStatus(text: "No agent is listening", isListening: false)
 }
