@@ -11,6 +11,7 @@ final class AppSession {
 
     init() {
         AppDefaults.register()
+        if !launch.isHarnessRun { windowState.viewedMarksStore = UserDefaultsViewedMarks() }
         #if DEBUG
         if launch.usesDemoBackend { install(DemoReviewBackend(model: model)) }
         #endif

@@ -61,6 +61,7 @@ final class UISelfTest {
         await checkDeletingPendingCanBeUndone()
         await checkArrowKeysMoveTheLineCursor()
         await checkViewedFoldsTheFile()
+        await checkViewedLapsesWhenTheDiffChanges()
         await checkNeedsYouCrossesLayers()
         await checkFinishReviewNeverSendsByItself()
     }
@@ -553,6 +554,64 @@ final class UISelfTest {
         record("viewed_folds_the_file", ["folded_and_counted": folded, "unfolded_again": unfolded, "pass": folded && unfolded])
     }
 
+    /// A Viewed mark lapses when any line of the diff changes, even when the counts stay the same,
+    /// and when a changed image's bytes change. A stack's saved marks come back in a new window.
+    private func checkViewedLapsesWhenTheDiffChanges() async {
+        let windowState = session.windowState
+        let store = MemoryViewedMarks()
+        windowState.viewedMarksStore = store
+        model.selectLayer(atPosition: 2)
+        await window.settle(400)
+        let path = "Sources/API/Client.swift"
+        guard let original = model.layer, let index = original.files.firstIndex(where: { $0.path == path }) else {
+            windowState.viewedMarksStore = nil
+            return record("viewed_lapses_when_the_diff_changes", ["pass": false, "reason": "no file to view"])
+        }
+        pane.setViewed(true, path: path)
+        await window.settle()
+        let fresh = ReviewWindowState()
+        fresh.viewedMarksStore = store
+        fresh.loadViewedMarksIfNeeded(from: model)
+        let savedAndRestored = fresh.isViewed(original.files[index], layerID: original.layerID)
+
+        var edited = original
+        edited.files[index].hunks = original.files[index].hunks.map { hunk in
+            var hunk = hunk
+            hunk.lines = hunk.lines.map { line in
+                var line = line
+                if line.kind == .added { line.text = line.text.replacingOccurrences(of: "= 30", with: "= 20") }
+                return line
+            }
+            return hunk
+        }
+        model.layer = edited
+        await window.settle()
+        let textChangeLapses = !windowState.isViewed(edited.files[index], layerID: edited.layerID)
+            && pane.rows.contains { $0.code?.path == path } && edited.files[index].additions == original.files[index].additions
+        model.layer = original
+        await window.settle()
+        pane.setViewed(false, path: path)
+
+        model.selectLayer(atPosition: 3)
+        await window.settle(400)
+        let imagePath = "Web/assets/logo.png"
+        var imageChangeLapses = false
+        if let layer = model.layer, let imageIndex = layer.files.firstIndex(where: { $0.path == imagePath }),
+           let bytes = layer.files[imageIndex].newImage {
+            pane.setViewed(true, path: imagePath)
+            var changed = layer
+            changed.files[imageIndex].newImage = bytes + Data([0])
+            imageChangeLapses = windowState.isViewed(layer.files[imageIndex], layerID: layer.layerID)
+                && !windowState.isViewed(changed.files[imageIndex], layerID: layer.layerID)
+            pane.setViewed(false, path: imagePath)
+        }
+        windowState.viewedMarksStore = nil
+        record("viewed_lapses_when_the_diff_changes", [
+            "saved_and_restored": savedAndRestored, "text_change_lapses": textChangeLapses, "image_change_lapses": imageChangeLapses,
+            "pass": savedAndRestored && textChangeLapses && imageChangeLapses,
+        ])
+    }
+
     /// Past the last thread that needs you on a layer, `a` moves on to the next layer that has one.
     private func checkNeedsYouCrossesLayers() async {
         model.selectLayer(atPosition: 1)
@@ -653,6 +712,20 @@ final class UISelfTest {
             print(line)
             fflush(stdout)
         }
+    }
+}
+
+/// Keeps Viewed marks as the saved bytes would be, in memory, so the self-test never writes defaults.
+@MainActor
+private final class MemoryViewedMarks: ViewedMarksStore {
+    private var saved: [Int: Data] = [:]
+
+    func marks(forStack stackID: Int) -> ViewedMarks {
+        saved[stackID].flatMap(UserDefaultsViewedMarks.decode) ?? [:]
+    }
+
+    func save(_ marks: ViewedMarks, forStack stackID: Int) {
+        saved[stackID] = UserDefaultsViewedMarks.encode(marks)
     }
 }
 #endif

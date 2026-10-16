@@ -161,7 +161,7 @@ extension DiffPaneController {
     /// Ticks or clears a file's Viewed box. A viewed file folds away, as on GitHub.
     func setViewed(_ viewed: Bool, path: String) {
         guard let layer = model.layer, let file = layer.files.first(where: { $0.path == path }) else { return }
-        windowState.setViewed(viewed, file: file, layerID: layer.layerID)
+        windowState.setViewed(viewed, file: file, layerID: layer.layerID, stackID: model.selection?.stackID)
         setFile(path, collapsed: viewed)
     }
 

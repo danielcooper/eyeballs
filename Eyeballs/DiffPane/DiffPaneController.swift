@@ -117,6 +117,7 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
             prepared = PreparedLayer(files: layer.files)
             tokenCache.removeAll()
             gutterChanged = metrics.fitNumbers(upTo: prepared.largestLineNumber)
+            unfoldFilesNoLongerViewed(in: layer)
         }
         shownLayer = layer
         rebuild()
@@ -138,6 +139,11 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
 
     private func show(_ layer: LayerContent) {
         if let shownLayerID { viewStates[shownLayerID, default: LayerViewState()].savedScroll = topVisibleAnchor() }
+        windowState.loadViewedMarksIfNeeded(from: model)
+        if viewStates[layer.layerID] == nil {
+            let viewed = layer.files.filter { windowState.isViewed($0, layerID: layer.layerID) }.map(\.path)
+            viewStates[layer.layerID] = LayerViewState(collapsedFiles: Set(viewed))
+        }
         flushAllDrafts()
         liveDrafts.removeAll()
         shownLayerID = layer.layerID
@@ -165,6 +171,15 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
             scroll(toY: 0)
         }
         updateCurrentFile()
+    }
+
+    /// A file folds away when you tick it Viewed. When its diff changes, the mark lapses and the
+    /// file opens again, as on GitHub.
+    private func unfoldFilesNoLongerViewed(in layer: LayerContent) {
+        let lapsed = layer.files.filter {
+            windowState.hasViewedMark($0.path, layerID: layer.layerID) && !windowState.isViewed($0, layerID: layer.layerID)
+        }
+        for file in lapsed { viewState.collapsedFiles.remove(file.path) }
     }
 
     private func clear() {

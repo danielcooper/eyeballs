@@ -22,10 +22,15 @@ final class ReviewWindowState {
     var currentFilePath: String?
     var focusedThreadID: Int?
     /// Files you ticked Viewed, by layer ID, with the diff they had then. A file whose diff
-    /// changes since is no longer viewed. The window keeps these until it quits.
-    private(set) var viewedFiles: [Int: [String: FileFingerprint]] = [:]
+    /// changes since is no longer viewed. The marks are saved per stack in `viewedMarksStore`.
+    private(set) var viewedFiles: ViewedMarks = [:]
 
     @ObservationIgnored weak var pane: DiffPaneController?
+    /// Nil keeps Viewed marks in memory only, as screenshot and self-test runs do.
+    @ObservationIgnored var viewedMarksStore: ViewedMarksStore?
+    @ObservationIgnored private var stackOfLayer: [Int: Int] = [:]
+    @ObservationIgnored private var loadedViewedMarksForStacks: Set<Int> = []
+    @ObservationIgnored private var fingerprints: [FingerprintKey: (file: FileItem, fingerprint: FileFingerprint)] = [:]
     /// A thread to show once its layer has loaded, after a jump from another layer.
     @ObservationIgnored var threadToRevealAfterLoad: Int?
     /// A layer comment to open, already written, once its layer has loaded.
@@ -84,15 +89,50 @@ final class ReviewWindowState {
     // MARK: Viewed files
 
     func isViewed(_ file: FileItem, layerID: Int) -> Bool {
-        viewedFiles[layerID]?[file.path] == FileFingerprint(file)
+        guard let mark = viewedFiles[layerID]?[file.path] else { return false }
+        return mark == fingerprint(of: file, layerID: layerID)
     }
 
-    func setViewed(_ viewed: Bool, file: FileItem, layerID: Int) {
+    /// True when you ticked the file Viewed, whether or not its diff has changed since.
+    func hasViewedMark(_ path: String, layerID: Int) -> Bool {
+        viewedFiles[layerID]?[path] != nil
+    }
+
+    func setViewed(_ viewed: Bool, file: FileItem, layerID: Int, stackID: Int?) {
         if viewed {
-            viewedFiles[layerID, default: [:]][file.path] = FileFingerprint(file)
+            viewedFiles[layerID, default: [:]][file.path] = fingerprint(of: file, layerID: layerID)
         } else {
             viewedFiles[layerID]?[file.path] = nil
         }
+        guard let stackID else { return }
+        stackOfLayer[layerID] = stackID
+        viewedMarksStore?.save(viewedFiles.filter { stackOfLayer[$0.key] == stackID }, forStack: stackID)
+    }
+
+    /// Reads a stack's saved Viewed marks the first time the window shows that stack.
+    func loadViewedMarksIfNeeded(from model: ReviewWindowModel) {
+        guard let stack = model.selectedStack, !loadedViewedMarksForStacks.contains(stack.id) else { return }
+        loadedViewedMarksForStacks.insert(stack.id)
+        guard let saved = viewedMarksStore?.marks(forStack: stack.id) else { return }
+        let layers = Set(stack.layers.map(\.id))
+        for (layerID, marks) in saved where layers.contains(layerID) {
+            stackOfLayer[layerID] = stack.id
+            viewedFiles[layerID, default: [:]].merge(marks) { current, _ in current }
+        }
+    }
+
+    /// Hashing a big diff is not free, so each file's fingerprint is kept until the file changes.
+    private func fingerprint(of file: FileItem, layerID: Int) -> FileFingerprint {
+        let key = FingerprintKey(layerID: layerID, path: file.path)
+        if let cached = fingerprints[key], cached.file == file { return cached.fingerprint }
+        let fingerprint = FileFingerprint(file)
+        fingerprints[key] = (file, fingerprint)
+        return fingerprint
+    }
+
+    private struct FingerprintKey: Hashable {
+        var layerID: Int
+        var path: String
     }
 
     func viewedCount(in layer: LayerContent) -> Int {
@@ -183,21 +223,6 @@ enum ThreadFilter: Hashable, CaseIterable {
         case .outdated: thread.isOutdated && !thread.isResolved
         case .resolved: thread.isResolved
         }
-    }
-}
-
-/// A cheap stand-in for a file's diff, so a Viewed mark lapses when the diff changes.
-struct FileFingerprint: Hashable {
-    var additions: Int
-    var deletions: Int
-    var hunkHeaders: [String]
-    var lineCount: Int
-
-    init(_ file: FileItem) {
-        additions = file.additions
-        deletions = file.deletions
-        hunkHeaders = file.hunks.map(\.header)
-        lineCount = file.newLines.count + file.oldLines.count
     }
 }
 
