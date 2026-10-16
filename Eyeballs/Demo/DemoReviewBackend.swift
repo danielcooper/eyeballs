@@ -72,6 +72,11 @@ final class DemoReviewBackend: ReviewBackend {
         publishAll()
     }
 
+    func deleteThread(_ threadID: Int) {
+        state.threads.removeAll { $0.id == threadID }
+        publishAll()
+    }
+
     func setResolved(_ resolved: Bool, threadID: Int) {
         guard let index = state.threads.firstIndex(where: { $0.id == threadID }) else { return }
         state.threads[index].isResolved = resolved
@@ -185,6 +190,7 @@ final class DemoReviewBackend: ReviewBackend {
         stack.layers = state.layers.map { layer in
             var item = layer.item
             item.openThreadCount = state.threads.filter { $0.layerID == item.id && !$0.isResolved }.count
+            item.needsYouCount = state.threads.filter { $0.layerID == item.id && $0.derivedState.needsYou }.count
             return item
         }
         stack.openThreadCount = state.threads.filter { !$0.isResolved }.count
@@ -199,6 +205,7 @@ final class DemoReviewBackend: ReviewBackend {
     }
 
     private func publishLayer() {
+        model.threadsByLayer = Dictionary(grouping: state.threads, by: \.layerID).mapValues { $0.map(\.item) }
         guard let layerID = model.selection?.layerID, let layer = state.layers.first(where: { $0.item.id == layerID }) else {
             model.layer = nil
             return
