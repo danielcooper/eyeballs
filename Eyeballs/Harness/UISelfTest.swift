@@ -289,7 +289,9 @@ final class UISelfTest {
         let anchorBefore = pane.topVisibleAnchor()
         let widthBefore = table.bounds.width
         var frame = window.frame
-        frame.size.width -= 300
+        // Narrower than this, the sidebar hides and hands the diff its width back.
+        let shrink = frame.width - MainView.threeColumnWidth - 10
+        frame.size.width -= shrink
         window.setFrame(frame, display: true)
         await window.settle(400)
         let mismatches = heightMismatches(allRows: true)
@@ -301,7 +303,7 @@ final class UISelfTest {
             "pass": mismatches == 0 && anchorBefore?.row == anchorAfter?.row && pane.lastRewrapMilliseconds < 250
                 && table.bounds.width < widthBefore - 100,
         ])
-        frame.size.width += 300
+        frame.size.width += shrink
         window.setFrame(frame, display: true)
         await window.settle()
     }
