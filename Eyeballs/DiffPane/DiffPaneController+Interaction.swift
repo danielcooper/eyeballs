@@ -213,6 +213,7 @@ extension DiffPaneController {
             liveDrafts[key] = comment(commentID)?.body ?? ""
         }
         if !state.openComposers.contains(key) { state.openComposers.append(key) }
+        state.previewingComposers = state.previewingComposers.intersection(state.openComposers).subtracting([key])
         viewState = state
         lineSelection = nil
         rebuild()
@@ -245,7 +246,7 @@ extension DiffPaneController {
     func closeComposer(_ key: ComposerKey) {
         flushDraft(for: key)
         liveDrafts[key] = nil
-        viewState.openComposers.removeAll { $0 == key }
+        forgetComposer(key)
         tableView.window?.makeFirstResponder(tableView)
         rebuild()
         redrawVisibleCodeRows()
@@ -258,7 +259,7 @@ extension DiffPaneController {
         draftSaves[key] = nil
         liveDrafts[key] = nil
         if case .draft(let draftKey) = key { model.saveDraft("", for: draftKey) }
-        viewState.openComposers.removeAll { $0 == key }
+        forgetComposer(key)
         tableView.window?.makeFirstResponder(tableView)
         rebuild()
         redrawVisibleCodeRows()
@@ -289,10 +290,30 @@ extension DiffPaneController {
         }
         if case .draft(let draftKey) = key { model.saveDraft("", for: draftKey) }
         liveDrafts[key] = nil
-        viewState.openComposers.removeAll { $0 == key }
+        forgetComposer(key)
         tableView.window?.makeFirstResponder(tableView)
         rebuild()
         redrawVisibleCodeRows()
+    }
+
+    /// Switches a composer between its text and the preview of its Markdown, keeping focus in it.
+    func setComposer(_ key: ComposerKey, previewing: Bool) {
+        guard viewState.openComposers.contains(key) else { return }
+        flushDraft(for: key)
+        if previewing { viewState.previewingComposers.insert(key) } else { viewState.previewingComposers.remove(key) }
+        rebuild()
+        guard let index = indexByID[.composer(key)] else { return }
+        scrollToShow(row: index)
+        if previewing {
+            tableView.window?.makeFirstResponder(tableView.view(atColumn: 0, row: index, makeIfNecessary: true))
+        } else {
+            focusComposer(key)
+        }
+    }
+
+    private func forgetComposer(_ key: ComposerKey) {
+        viewState.openComposers.removeAll { $0 == key }
+        viewState.previewingComposers.remove(key)
     }
 
     func composerTextDidChange(_ text: String, for key: ComposerKey) {

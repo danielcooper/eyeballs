@@ -43,6 +43,7 @@ struct KeyboardShortcutsView: View {
         Group(title: "In a comment box", note: nil, shortcuts: [
             Shortcut(keys: "⌘↩", action: "Add to review"),
             Shortcut(keys: "⌥⌘↩", action: "Send now"),
+            Shortcut(keys: "⇧⌘P", action: "Preview the Markdown, or go back to writing"),
             Shortcut(keys: "Esc", action: "Close and keep the draft"),
         ]),
         Group(title: "In Finish review", note: nil, shortcuts: [

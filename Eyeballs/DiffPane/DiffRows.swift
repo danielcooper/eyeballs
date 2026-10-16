@@ -186,11 +186,11 @@ struct ThreadRowContent: Equatable {
 struct ComposerRowContent: Equatable {
     var key: ComposerKey
     var title: String
+    /// What ⌘↩ and the blue button do: "Add to review", or "Save" for an edit.
     var submitTitle: String
-    /// Nil for an edit, which has no "send now".
-    var sendNowTitle: String?
-    /// True when sending at once is the main action, as when you answer the agent's question.
-    var sendNowIsPrimary = false
+    /// False for an edit, which has no Send now.
+    var canSendNow: Bool
+    var isPreviewing = false
     var attachedToCard: Bool
     var leadingInset: Double
 }
@@ -202,6 +202,8 @@ struct LayerViewState {
     var loadedBigFiles: Set<String> = []
     var expandedGaps: Set<GapID> = []
     var openComposers: [ComposerKey] = []
+    /// Open composers showing their Markdown preview instead of the text.
+    var previewingComposers: Set<ComposerKey> = []
     var expandedResolvedThreads: Set<Int> = []
     var savedScroll: ScrollAnchor?
 }
@@ -513,22 +515,14 @@ struct DiffRowBuilder {
     }
 
     private func composerContent(for key: ComposerKey, attachedToCard: Bool, inset: Double) -> ComposerRowContent {
-        switch key {
-        case .draft(.newThread(let anchor)):
-            return ComposerRowContent(key: key, title: Self.composerTitle(for: anchor), submitTitle: "Add to review",
-                                      sendNowTitle: "Comment now", attachedToCard: attachedToCard, leadingInset: inset)
-        case .draft(.reply(let threadID)):
-            let state = layer.threads.first { $0.id == threadID }?.state
-            return ComposerRowContent(key: key, title: Self.replyTitle(for: state, agentName: agentName), submitTitle: "Add to review",
-                                      sendNowTitle: "Reply now", sendNowIsPrimary: state == .agentAsks,
-                                      attachedToCard: attachedToCard, leadingInset: inset)
-        case .draft(.reviewSummary):
-            return ComposerRowContent(key: key, title: "Review summary", submitTitle: "Save",
-                                      sendNowTitle: nil, attachedToCard: attachedToCard, leadingInset: inset)
-        case .edit:
-            return ComposerRowContent(key: key, title: "Edit comment", submitTitle: "Save",
-                                      sendNowTitle: nil, attachedToCard: attachedToCard, leadingInset: inset)
+        let (title, canSendNow): (String, Bool) = switch key {
+        case .draft(.newThread(let anchor)): (Self.composerTitle(for: anchor), true)
+        case .draft(.reply(let threadID)): (Self.replyTitle(for: layer.threads.first { $0.id == threadID }?.state, agentName: agentName), true)
+        case .draft(.reviewSummary): ("Review summary", false)
+        case .edit: ("Edit comment", false)
         }
+        return ComposerRowContent(key: key, title: title, submitTitle: canSendNow ? "Add to review" : "Save", canSendNow: canSendNow,
+                                  isPreviewing: state.previewingComposers.contains(key), attachedToCard: attachedToCard, leadingInset: inset)
     }
 
     /// Says what you are replying to, in the agent's name rather than the thread's number.

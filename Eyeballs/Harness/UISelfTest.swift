@@ -55,6 +55,7 @@ final class UISelfTest {
         await checkShortcutsNeedTableFocus()
         await checkReviewLoop()
         await checkCancelCanBeUndone()
+        await checkComposerButtonsMatchTheKeys()
         checkSmallGapsShowInline()
         await checkThreadJumpShowsItsCode()
         await checkDeletingPendingCanBeUndone()
@@ -393,6 +394,42 @@ final class UISelfTest {
         record("cancel_can_be_undone", ["discarded": discarded, "restored_by_undo": restored, "esc_keeps_draft": keptAfterEscape,
                                         "pass": discarded && restored && keptAfterEscape])
         model.saveDraft("", for: .newThread(.lines(range)))
+    }
+
+    /// Answering the agent's question, the buttons still run Cancel, Send now, Add to review, and
+    /// the blue one is Add to review, as ⌘↩ is. ⇧⌘P shows the preview and goes back to the text.
+    private func checkComposerButtonsMatchTheKeys() async {
+        model.selectLayer(atPosition: 2)
+        await window.settle(400)
+        let key = ComposerKey.draft(.reply(threadID: 38))
+        pane.openComposer(key)
+        await window.settle()
+        guard let index = pane.indexByID[.composer(key)],
+              let row = table.view(atColumn: 0, row: index, makeIfNecessary: true) as? ComposerRowView else {
+            return record("composer_buttons_match_the_keys", ["pass": false, "reason": "the reply composer did not open"])
+        }
+        let order = row.buttonTitlesInOrder
+        let primary = row.primaryButtonTitle
+        let body = "**Yes**, put it behind the flag."
+        type(body)
+        press(keyCode: 35, characters: "P", modifiers: [.command, .shift])
+        await window.settle()
+        let previewed = row.content?.isPreviewing == true && row.textView.isHidden && window.firstResponder === row
+        press(keyCode: 35, characters: "P", modifiers: [.command, .shift])
+        await window.settle()
+        let wroteAgain = row.content?.isPreviewing == false && window.firstResponder === row.textView
+        press(keyCode: 36, characters: "\r", modifiers: .command)
+        await window.settle()
+        let reply = model.layer?.threads.first { $0.id == 38 }?.comments.last
+        let addedToReview = reply?.body == body && reply?.isPending == true
+        record("composer_buttons_match_the_keys", [
+            "buttons": order, "blue_button": primary, "preview_by_shift_command_p": previewed, "back_to_writing": wroteAgain,
+            "command_return_added_to_review": addedToReview,
+            "pass": order == ["Cancel", ComposerRowView.sendNowTitle, "Add to review"] && primary == "Add to review"
+                && previewed && wroteAgain && addedToReview,
+        ])
+        if let reply, reply.isPending { model.deleteComment(reply.id) }
+        await window.settle()
     }
 
     // MARK: Checks from the design review

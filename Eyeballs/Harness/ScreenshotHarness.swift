@@ -52,6 +52,12 @@ final class ScreenshotHarness {
             pane?.openComposer(.draft(key))
             await window.settle()
             await shoot("03-composer-on-range", window)
+            model.saveDraft("Generate the idempotency key **once per order**, not per request:\n\n- a retry reuses it\n- a new order gets a new one", for: key)
+            pane?.closeComposer(.draft(key))
+            pane?.openComposer(.draft(key))
+            pane?.setComposer(.draft(key), previewing: true)
+            await window.settle()
+            await shoot("31-composer-preview", window)
             pane?.closeComposer(.draft(key))
         }
 
