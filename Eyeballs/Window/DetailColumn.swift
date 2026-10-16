@@ -1,40 +1,54 @@
 import SwiftUI
 
-/// The right-hand column: the diff pane or its empty and loading states, news floating over it,
-/// and the review bar along the bottom.
+/// The right-hand column: news in a row of its own at the top, the diff pane or its empty and
+/// loading states, and the review bar along the bottom.
 struct DetailColumn: View {
     let model: ReviewWindowModel
     let windowState: ReviewWindowState
 
     var body: some View {
         VStack(spacing: 0) {
-            ZStack(alignment: .bottom) {
+            notices
+            ZStack(alignment: .top) {
                 DiffPaneView(model: model, windowState: windowState, layer: model.layer,
                              layerItem: model.selectedLayer, stack: model.selectedStack,
                              viewedFiles: windowState.viewedFiles[model.selection?.layerID ?? -1] ?? [:])
                 overlay
-                notices
             }
             ReviewBar(model: model, windowState: windowState)
         }
         .background(Color.paneBackground)
     }
 
-    /// News such as a newer revision floats over the bottom of the pane, so the code you are
-    /// reading never moves when it arrives.
+    /// News such as a newer revision sits above the diff, never over it, so it hides no code or
+    /// controls. Taking it in is always your choice.
+    @ViewBuilder
     private var notices: some View {
-        VStack(spacing: 8) {
-            if let banner = model.banner {
-                FloatingNotice(message: banner.message, symbol: "arrow.triangle.2.circlepath.circle.fill", tint: .blue,
-                               actionTitle: banner.actionTitle, isProminent: true) { model.acceptBanner() }
+        if model.banner != nil || model.errorMessage != nil {
+            VStack(spacing: 8) {
+                if let banner = model.banner {
+                    NoticeBanner(message: banner.message, symbol: "arrow.triangle.2.circlepath.circle.fill", tint: .accentColor, actions: [
+                        NoticeBanner.Action(title: banner.actionTitle, isProminent: true) { model.acceptBanner() },
+                    ])
+                }
+                if let message = model.errorMessage {
+                    NoticeBanner(message: message, symbol: "exclamationmark.triangle.fill", tint: .orange, actions: errorActions)
+                }
             }
-            if let message = model.errorMessage {
-                FloatingNotice(message: message, symbol: "exclamationmark.triangle.fill", tint: .orange,
-                               actionTitle: "Dismiss", isProminent: false) { model.errorMessage = nil }
-            }
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .background(Color.paneBackground)
+            .overlay(alignment: .bottom) { Divider() }
         }
-        .padding(.horizontal, 24)
-        .padding(.bottom, 16)
+    }
+
+    private var errorActions: [NoticeBanner.Action] {
+        var actions: [NoticeBanner.Action] = []
+        if model.selection != nil {
+            actions.append(NoticeBanner.Action(title: "Try Again", help: "Read the stack again") { windowState.retryAfterError(model) })
+        }
+        actions.append(NoticeBanner.Action(title: "Dismiss") { model.errorMessage = nil })
+        return actions
     }
 
     @ViewBuilder
@@ -91,44 +105,53 @@ struct DetailColumn: View {
     }
 }
 
-/// A capsule of news over the pane, such as a newer revision or an error, with one button.
-struct FloatingNotice: View {
+/// One piece of news above the diff, such as a newer revision or an error, with its buttons.
+struct NoticeBanner: View {
+    struct Action: Identifiable {
+        var title: String
+        var isProminent = false
+        var help: String?
+        var run: () -> Void
+        var id: String { title }
+    }
+
     let message: String
     let symbol: String
     let tint: Color
-    let actionTitle: String
-    let isProminent: Bool
-    let action: () -> Void
+    let actions: [Action]
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             Image(systemName: symbol)
                 .font(.body)
                 .foregroundStyle(tint)
+                .accessibilityHidden(true)
             Text(message)
                 .font(.callout)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-            actionButton
-                .controlSize(.small)
-                .fixedSize()
+                .lineLimit(1...3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                ForEach(actions) { action in
+                    button(for: action)
+                }
+            }
+            .controlSize(.small)
+            .fixedSize()
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 8)
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(tint.opacity(0.35)))
-        .shadow(color: .black.opacity(0.16), radius: 12, y: 4)
-        .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 10).fill(tint.opacity(0.1)))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(tint.opacity(0.35)))
         .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
-    private var actionButton: some View {
-        if isProminent {
-            Button(actionTitle, action: action).buttonStyle(.borderedProminent)
+    private func button(for action: Action) -> some View {
+        if action.isProminent {
+            Button(action.title, action: action.run).buttonStyle(.borderedProminent).help(action.help ?? "")
         } else {
-            Button(actionTitle, action: action)
+            Button(action.title, action: action.run).help(action.help ?? "")
         }
     }
 }

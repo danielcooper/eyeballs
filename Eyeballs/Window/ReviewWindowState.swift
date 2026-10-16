@@ -49,6 +49,12 @@ final class ReviewWindowState {
         model.select(LayerSelection(stackID: stack.id, layerID: layerID))
     }
 
+    /// Clears the error and reads the selected layer again, which is how every read is retried.
+    func retryAfterError(_ model: ReviewWindowModel) {
+        model.errorMessage = nil
+        if let selection = model.selection { model.select(selection) }
+    }
+
     /// Starts a layer comment that asks the agent to restack the layer onto its parent. You
     /// still choose whether to add it to the review or send it now.
     func askToRestack(_ layer: LayerItem, in model: ReviewWindowModel) {
