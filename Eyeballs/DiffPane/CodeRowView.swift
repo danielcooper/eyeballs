@@ -8,6 +8,7 @@ import CoreText
 @MainActor
 final class CodeRowView: NSView {
     static let identifier = NSUserInterfaceItemIdentifier("code")
+    static let selectionBarWidth: CGFloat = 3
 
     weak var pane: DiffPaneController?
     private(set) var content: CodeRowContent?
@@ -65,9 +66,9 @@ final class CodeRowView: NSView {
         NSRect(x: 0, y: 0, width: 2 * metrics.numberColumnWidth, height: bounds.height).fill(using: .sourceOver)
         if isSelectedLine {
             DiffColors.selectedLine.setFill()
-            NSRect(x: 2 * metrics.numberColumnWidth, y: 0, width: bounds.width, height: bounds.height).fill(using: .sourceOver)
-            DiffColors.selectedGutter.setFill()
-            NSRect(x: 0, y: 0, width: 2 * metrics.numberColumnWidth, height: bounds.height).fill(using: .sourceOver)
+            bounds.fill(using: .sourceOver)
+            DiffColors.selectedBar.setFill()
+            NSRect(x: 0, y: 0, width: Self.selectionBarWidth, height: bounds.height).fill()
         }
     }
 

@@ -24,8 +24,9 @@ enum DiffColors {
     static let gapBand = adaptive(light: rgb(0xF1F8FF), dark: rgba(56, 139, 253, 0.08))
     static let gapGutter = adaptive(light: rgba(84, 174, 255, 0.22), dark: rgba(56, 139, 253, 0.18))
 
-    static let selectedLine = adaptive(light: rgb(0xFFF8C5), dark: rgba(187, 128, 9, 0.18))
-    static let selectedGutter = adaptive(light: rgba(212, 167, 44, 0.42), dark: rgba(187, 128, 9, 0.45))
+    /// See-through, so an added or deleted line keeps its colour inside a thread's range.
+    static let selectedLine = adaptive(light: rgba(212, 167, 44, 0.18), dark: rgba(210, 153, 34, 0.15))
+    static let selectedBar = adaptive(light: rgb(0xBF8700), dark: rgb(0xD29922))
 
     /// Primer's muted grey, for context lines only: on a tinted gutter it falls below 4.5:1.
     static let lineNumber = adaptive(light: rgb(0x59636E), dark: rgb(0x9198A1))
