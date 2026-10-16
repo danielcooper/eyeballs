@@ -141,11 +141,7 @@ private struct ThreadListRow: View {
                     .font(.subheadline.monospaced())
                     .foregroundStyle(.tertiary)
             }
-            Text(DiffRowBuilder.anchorText(for: thread.anchor))
-                .font(.subheadline.monospaced())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            ThreadLocationText(anchor: thread.anchor)
             if let lastComment {
                 (Text(lastComment.author.name + ": ").fontWeight(.semibold) + Text(MarkdownText.attributed(firstLine(of: lastComment.body))))
                     .font(.callout)
@@ -159,5 +155,39 @@ private struct ThreadListRow: View {
 
     private func firstLine(of body: String) -> String {
         body.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+    }
+}
+
+/// Where a thread sits, such as "Sources/API/Client.swift:41–47". When space runs short the
+/// folder shortens from its start; the file name and the lines always show in full.
+struct ThreadLocationText: View {
+    let anchor: ThreadAnchor
+
+    private var folder: String? {
+        let path: String? = switch anchor {
+        case .lines(let range): range.path
+        case .file(let path): path
+        case .layer: nil
+        }
+        guard let folder = path.map({ ($0 as NSString).deletingLastPathComponent }), !folder.isEmpty else { return nil }
+        return folder + "/"
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if let folder {
+                Text(folder)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+            Text(DiffRowBuilder.anchorText(for: anchor))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize()
+                .layoutPriority(1)
+        }
+        .font(.subheadline.monospaced())
+        .accessibilityElement(children: .combine)
     }
 }

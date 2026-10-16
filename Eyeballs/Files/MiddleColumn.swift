@@ -28,7 +28,7 @@ struct MiddleColumn: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 440)
+        .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
     }
 }
 
@@ -157,23 +157,23 @@ struct FileRow: View {
                 .frame(width: 20)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text((file.path as NSString).lastPathComponent)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(isViewed.wrappedValue ? .secondary : .primary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    if let words = style.wordsShownInHeader {
-                        Text(words)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Text(folderLine)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Text((file.path as NSString).lastPathComponent)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(isViewed.wrappedValue ? .secondary : .primary)
                     .lineLimit(1)
-                    .truncationMode(file.oldPath == nil ? .head : .middle)
+                    .truncationMode(.middle)
+                HStack(spacing: 4) {
+                    if let words = style.wordsShownInHeader {
+                        Text("\(words) ·")
+                            .fontWeight(.medium)
+                            .fixedSize()
+                    }
+                    Text(folderLine)
+                        .lineLimit(1)
+                        .truncationMode(file.oldPath == nil ? .head : .middle)
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 2) {

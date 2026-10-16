@@ -27,7 +27,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
+        .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
     }
 
     private var selection: Binding<LayerSelection?> {

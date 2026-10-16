@@ -260,7 +260,10 @@ final class ScreenshotHarness {
         window.setFrame(NSRect(origin: frame.origin, size: NSSize(width: 1000, height: 700)), display: true)
         await window.settle(500)
         windowState.revealThread(42)
+        model.errorMessage = "Couldn't read the stack: git exited with status 128. Check that the repository still exists."
+        await window.settle()
         await shoot("29-narrow-window", window)
+        model.errorMessage = nil
         window.setFrame(frame, display: true)
         await window.settle()
     }

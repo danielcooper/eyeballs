@@ -18,6 +18,7 @@ struct DetailColumn: View {
             ReviewBar(model: model, windowState: windowState)
         }
         .background(Color.paneBackground)
+        .navigationSplitViewColumnWidth(min: 560, ideal: 840)
     }
 
     /// News such as a newer revision sits above the diff, never over it, so it hides no code or

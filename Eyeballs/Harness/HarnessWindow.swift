@@ -75,7 +75,7 @@ final class HarnessWindow: NSWindow {
 
         let views = descendants(of: frameView)
         let glassShapes = views.filter { name(of: $0).hasPrefix("_NSCoreHostingView") && $0.superview.map { name(of: $0).contains("Glass") } == true }
-        let containers = views.filter { name(of: $0).contains("ConcentricGlassEffectView") }
+        let containers = views.filter { name(of: $0).contains("ConcentricGlassEffectView") && !$0.isHiddenOrHasHiddenAncestor }
         let toolbarItems = views.filter { name(of: $0) == "NSToolbarItemViewer" && !$0.isHidden && $0.frame.width > 0 }
             .filter { item in descendants(of: item).contains { name(of: $0).contains("ToolbarItemHostingView") || $0 is NSButton } }
         let hidden = glassShapes + toolbarItems

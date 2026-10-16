@@ -2,9 +2,15 @@ import SwiftUI
 
 /// The main window: the empty state until a repository is open, then the review layout.
 struct MainView: View {
+    /// Below this width the sidebar hides itself, so the diff keeps room to read. The toolbar's
+    /// layer navigator still moves you through the stack.
+    nonisolated static let threeColumnWidth: CGFloat = 1250
+
     let model: ReviewWindowModel
     let windowState: ReviewWindowState
     @State private var columns = NavigationSplitViewVisibility.all
+    /// True while the sidebar is hidden only because the window is narrow.
+    @State private var sidebarHiddenForWidth = false
 
     var body: some View {
         Group {
@@ -19,6 +25,12 @@ struct MainView: View {
                     DetailColumn(model: model, windowState: windowState)
                 }
                 .navigationSplitViewStyle(.balanced)
+                .onGeometryChange(for: Bool.self) { $0.size.width < Self.threeColumnWidth } action: { isNarrow in
+                    fitColumns(narrow: isNarrow)
+                }
+                .onChange(of: columns) {
+                    if columns == .all { sidebarHiddenForWidth = false }
+                }
             }
         }
         .navigationTitle(model.selectedStack?.name ?? "Eyeballs")
@@ -34,6 +46,17 @@ struct MainView: View {
         .frame(minWidth: 1000, minHeight: 620)
         .onAppear { windowState.loadSummaryIfNeeded(from: model) }
         .onChange(of: model.selection) { windowState.loadSummaryIfNeeded(from: model) }
+    }
+
+    /// Hides the sidebar when the window gets narrow, and shows it again when the window widens,
+    /// unless you opened it yourself in between.
+    private func fitColumns(narrow: Bool) {
+        if narrow, columns == .all {
+            columns = .doubleColumn
+            sidebarHiddenForWidth = true
+        } else if !narrow, sidebarHiddenForWidth {
+            columns = .all
+        }
     }
 
     private var subtitle: String {
