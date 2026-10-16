@@ -6,7 +6,7 @@ import Foundation
 /// binary files, mode changes, symlinks, submodules, `\ No newline at end of file`, CRLF lines
 /// and quoted paths. A type change arrives as two entries, a deletion and an addition, as git
 /// prints it. Text before the first `diff --git` line is skipped.
-public enum UnifiedDiffParser {
+public enum UnifiedDiffParser: Sendable {
     /// Throws `DiffParseError` when a hunk is cut short or a header cannot be read.
     public static func parse(_ data: Data) throws -> [DiffFile] {
         try parse(Array(data))

@@ -6,7 +6,7 @@ import Foundation
 /// hunks above it, and any hunk that touches its lines makes it outdated. Every result is then
 /// checked against the new blob's text, and a result whose lines no longer match comes back
 /// outdated, because an outdated thread beats a wrong one.
-public enum SimplePorter {
+public enum SimplePorter: Sendable {
     /// Ports `anchor` to `target`. A pure function: the same inputs always give the same result.
     public static func port(_ anchor: PortAnchor, to target: PortTarget) -> PortResult {
         guard let path = target.path else {

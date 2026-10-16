@@ -17,7 +17,7 @@ public struct RawDiffEntry: Hashable, Sendable {
 }
 
 /// Reads `git diff --raw -z --no-abbrev` output.
-public enum RawDiffParser {
+public enum RawDiffParser: Sendable {
     /// Throws `DiffParseError` for anything but whole records. `line` in the error counts records.
     public static func parse(_ data: Data) throws -> [RawDiffEntry] {
         var fields = Array(data).split(separator: 0, omittingEmptySubsequences: false)
@@ -96,7 +96,7 @@ public struct NumstatEntry: Hashable, Sendable {
 }
 
 /// Reads `git diff --numstat -z` output.
-public enum NumstatParser {
+public enum NumstatParser: Sendable {
     /// Throws `DiffParseError` for anything but whole records. `line` in the error counts records.
     public static func parse(_ data: Data) throws -> [NumstatEntry] {
         var reader = FieldReader(bytes: Array(data))
