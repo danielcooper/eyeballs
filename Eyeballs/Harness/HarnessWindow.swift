@@ -15,8 +15,24 @@ final class HarnessWindow: NSWindow {
     private var sidebarWindow: NSWindow?
 
     static func make(model: ReviewWindowModel, windowState: ReviewWindowState) -> HarnessWindow {
-        let host = NSHostingController(rootView: MainView(model: model, windowState: windowState).environment(\.controlActiveState, .key))
-        host.sceneBridgingOptions = [.toolbars, .title]
+        let window = make(MainView(model: model, windowState: windowState), size: size, bridgesToolbar: true)
+        window.harnessModel = model
+        window.harnessWindowState = windowState
+        return window
+    }
+
+    /// Popover windows belong to AppKit, so they get the same key appearance by swapping in a
+    /// method, for screenshots only.
+    static func lendKeyAppearanceToPopovers() {
+        guard let popoverClass = NSClassFromString("_NSPopoverWindow") else { return }
+        let alwaysTrue: @convention(block) (AnyObject) -> Bool = { _ in true }
+        class_replaceMethod(popoverClass, NSSelectorFromString("hasKeyAppearance"), imp_implementationWithBlock(alwaysTrue), "B@:")
+    }
+
+    /// Any view in a plain offscreen window, such as the Keyboard Shortcuts window.
+    static func make<Content: View>(_ content: Content, size: NSSize, bridgesToolbar: Bool = false) -> HarnessWindow {
+        let host = NSHostingController(rootView: content.environment(\.controlActiveState, .key))
+        if bridgesToolbar { host.sceneBridgingOptions = [.toolbars, .title] }
         let window = HarnessWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -24,8 +40,6 @@ final class HarnessWindow: NSWindow {
         window.isReleasedWhenClosed = false
         window.toolbarStyle = .unified
         window.contentViewController = host
-        window.harnessModel = model
-        window.harnessWindowState = windowState
         window.setFrame(NSRect(origin: NSPoint(x: -30_000, y: -30_000), size: size), display: false)
         window.orderFrontRegardless()
         return window
@@ -45,6 +59,8 @@ final class HarnessWindow: NSWindow {
     // Offscreen windows are never key, which would draw every control in its inactive style.
     override var isKeyWindow: Bool { true }
     override var isMainWindow: Bool { true }
+    // AppKit asks this private property, not isKeyWindow, before it fills a button with the accent colour.
+    @objc var hasKeyAppearance: Bool { true }
 
     /// Draws the whole window, toolbar included, into a bitmap.
     ///
@@ -96,8 +112,28 @@ final class HarnessWindow: NSWindow {
         for button in views where name(of: button).hasPrefix("_NSTheme") && name(of: button).hasSuffix("Widget") {
             draw(button, into: frameView)
         }
+        for popover in NSApp.windows where popover !== self && popover.isVisible && String(describing: type(of: popover)).contains("Popover") {
+            drawPopover(popover, into: frameView, dark: isDark)
+        }
         NSGraphicsContext.restoreGraphicsState()
         return bitmap
+    }
+
+    /// Popovers are windows of their own, so `cacheDisplay` of this window leaves them out.
+    /// Each is drawn on a flat stand-in for its glass, where it sits over this window. AppKit
+    /// pulls a popover back onto the screen, so one that lands outside is moved back in.
+    private func drawPopover(_ popover: NSWindow, into frameView: NSView, dark: Bool) {
+        guard let content = popover.contentView, content.bounds.width > 0, content.bounds.height > 0,
+              let image = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { return }
+        content.layoutSubtreeIfNeeded()
+        markNeedsDisplay(content)
+        content.displayIfNeeded()
+        content.cacheDisplay(in: content.bounds, to: image)
+        var onScreen = popover.convertToScreen(content.convert(content.bounds, to: nil))
+        onScreen.origin.x = min(max(frame.minX + 8, onScreen.minX), frame.maxX - onScreen.width - 8)
+        let rect = frameView.convert(convertFromScreen(onScreen), from: nil)
+        paintGlass(in: rect, radius: 16, dark: dark)
+        image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 
     private func paintGlass(in rect: NSRect, radius: CGFloat, dark: Bool) {
@@ -191,5 +227,6 @@ private struct HarnessSidebar: View {
 private final class SidebarHarnessWindow: NSWindow {
     override var isKeyWindow: Bool { true }
     override var isMainWindow: Bool { true }
+    @objc var hasKeyAppearance: Bool { true }
 }
 #endif
