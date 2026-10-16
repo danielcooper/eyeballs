@@ -113,7 +113,7 @@ extension DemoState {
                 comment(claude, "It has its own type in `Retry.swift`, but I kept it internal. Tests use `@testable import`, and making it public would widen the API for one test.", ago(1.5), status: .declined),
             ]),
             DemoThread(id: 44, layerID: 13, anchor: lines("Web/Checkout.tsx", source.checkoutNew, "{isSubmitting ? <Spinner"), comments: [
-                comment(you, "Show a spinner while the order submits. People double-click **Place order** today.", ago(19)),
+                comment(you, "Show a spinner while the order submits. People double-click **Place order** today.", ago(19), edited: true),
                 comment(claude, "Should the spinner block the whole form, or just the **Place order** button? Right now the address form is disabled too.", ago(0.8), status: .question),
             ]),
             DemoThread(id: 45, layerID: 13, anchor: lines("Web/Checkout.tsx", source.checkoutNew, "const total = sumMoney"), comments: [

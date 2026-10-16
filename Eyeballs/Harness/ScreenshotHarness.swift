@@ -44,12 +44,15 @@ final class ScreenshotHarness {
 
         model.selectLayer(atPosition: 2)
         await window.settle(400)
-        if ProcessInfo.processInfo.environment["EYEBALLS_DUMP_VIEWS"] != nil, let frame = window.contentView?.superview { probe(frame) }
         await shoot("01-layer-overview")
 
         windowState.revealThread(42)
         await window.settle()
+        if let pane = windowState.pane, let row = pane.lineRowIndex(path: "Sources/API/Client.swift", side: .head, line: 54) {
+            pane.setHoveredRow(pane.rows[row].id)
+        }
         await shoot("02-layer-threads")
+        windowState.pane?.setHoveredRow(nil)
 
         if let range = lineRange(in: "Sources/API/Client.swift", from: "request.httpBody = body", to: "request.setValue(UUID().uuidString") {
             let key = DraftKey.newThread(.lines(range))
@@ -60,43 +63,68 @@ final class ScreenshotHarness {
             windowState.pane?.closeComposer(.draft(key))
         }
 
+        windowState.revealOverview()
+        model.saveDraft("Yes, put it behind `checkoutV2`. Ship models and api-client first, then web-ui.", for: .reply(threadID: 38))
+        windowState.pane?.openComposer(.draft(.reply(threadID: 38)))
+        await window.settle()
+        windowState.pane?.scroll(toY: 120)
+        await shoot("04-reply-composer")
+        windowState.pane?.closeComposer(.draft(.reply(threadID: 38)))
+
         windowState.pane?.expandGap(GapID(path: "Sources/API/Client.swift", index: 1))
         windowState.revealFile("Sources/API/Client.swift")
         await window.settle()
         if let pane = windowState.pane, let row = pane.lineRowIndex(path: "Sources/API/Client.swift", side: .head, line: 22) {
             pane.jump(toRow: row, leavingAbove: 60)
         }
-        await window.settle()
-        await shoot("04-expanded-unchanged-lines")
+        await shoot("05-expanded-unchanged-lines")
 
         windowState.revealFile("Sources/API/Generated/Schema.swift")
         if let pane = windowState.pane, let header = pane.indexByID[.fileHeader("Sources/API/Endpoints.swift")] {
             pane.jump(toRow: header + 3)
         }
-        await window.settle()
-        await shoot("05-collapsed-big-file")
+        await shoot("06-collapsed-big-file")
+
+        windowState.revealFile("Sources/API/Endpoints.swift")
+        await shoot("07-outdated-thread")
+
+        model.selectLayer(atPosition: 1)
+        await window.settle(400)
+        windowState.revealFile("Sources/Models/Money.swift")
+        if let pane = windowState.pane, let row = pane.indexByID[.thread(40)] {
+            pane.jump(toRow: max(0, row - 8))
+        }
+        await shoot("08-resolved-thread")
 
         model.selectLayer(atPosition: 3)
         await window.settle(400)
         windowState.middleTab = .threads
         windowState.revealThread(44)
-        await window.settle()
-        await shoot("06-threads-list")
+        await shoot("09-threads-list")
         windowState.middleTab = .files
+
+        windowState.revealFile("Web/assets/checkout-hero.png")
+        await shoot("10-binary-and-rename")
 
         model.selectLayer(atPosition: 2)
         await window.settle(400)
         windowState.revealThread(46)
         windowState.summaryText = "Close. One real bug in the retry path, and a question about the timeout."
         windowState.verdict = .requestChanges
-        await window.settle()
-        await shoot("07-before-submit")
+        await shoot("11-before-submit")
         windowState.submit(model)
-        await window.settle()
-        await shoot("08-submit-sent")
+        await shoot("12-submit-sent")
         try? await Task.sleep(for: .milliseconds(2_300))
-        await window.settle()
-        await shoot("09-submit-delivered")
+        await shoot("13-submit-delivered")
+
+        let shownLayer = model.layer
+        model.layer = LayerContent(layerID: -1, commits: [], files: [], threads: [])
+        await shoot("14-layer-without-changes")
+        model.layer = nil
+        model.isLoadingLayer = true
+        await shoot("15-loading")
+        model.isLoadingLayer = false
+        model.layer = shownLayer
 
         window.close()
         let empty = ReviewWindowModel()
@@ -106,19 +134,12 @@ final class ScreenshotHarness {
             emptyWindow.appearance = NSAppearance(named: appearance)
             await emptyWindow.settle(300)
             if let data = emptyWindow.snapshot()?.representation(using: .png, properties: [:]),
-               (try? data.write(to: folder.appendingPathComponent("10-nothing-to-review-\(suffix).png"))) != nil {
+               (try? data.write(to: folder.appendingPathComponent("16-nothing-to-review-\(suffix).png"))) != nil {
                 written += 1
             }
         }
         emptyWindow.close()
         return written
-    }
-
-    private func probe(_ view: NSView) {
-        if let table = view as? NSTableView {
-            print("TABLE \(type(of: table)) rows=\(table.numberOfRows) frame=\(table.frame) visible=\(table.visibleRect) window=\(table.window != nil)")
-        }
-        for child in view.subviews { probe(child) }
     }
 
     private func lineRange(in path: String, from first: String, to last: String) -> LineRange? {

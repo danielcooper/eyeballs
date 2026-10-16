@@ -39,6 +39,8 @@ final class UISelfTest {
         ])
 
         checkRowsMatchTheModel()
+        checkTextLogic()
+        await checkMenuShortcuts()
         model.selectLayer(atPosition: 2)
         await window.settle(400)
         pane.loadBigFile("Sources/API/Generated/Schema.swift")
@@ -51,6 +53,7 @@ final class UISelfTest {
         await checkReloadWithDifferentLayer()
         await checkResizeRewraps()
         await checkShortcutsNeedTableFocus()
+        await checkReviewLoop()
     }
 
     // MARK: Checks
@@ -80,8 +83,77 @@ final class UISelfTest {
             }
             let shown = pane.rows.compactMap(\.threadID)
             if shown.sorted() != layer.threads.map(\.id).sorted() { problems.append("layer \(position) shows threads \(shown) of \(layer.threads.map(\.id))") }
+            if table.numberOfRows != pane.rows.count { problems.append("layer \(position): the table has \(table.numberOfRows) rows, the pane \(pane.rows.count)") }
+            let wrong = heightMismatches(allRows: true)
+            if wrong > 0 { problems.append("layer \(position): \(wrong) rows have the wrong height after inserts") }
         }
         record("rows_match_the_model", ["problems": problems, "pass": problems.isEmpty])
+    }
+
+    /// The highlighter and the intraline pairing give the expected spans for known lines.
+    private func checkTextLogic() {
+        var problems: [String] = []
+        func kinds(_ line: String, _ language: CodeLanguage) -> [String: TokenKind] {
+            var result: [String: TokenKind] = [:]
+            for token in SyntaxHighlighter.tokens(in: line, language: language) {
+                result[(line as NSString).substring(with: token.range)] = token.kind
+            }
+            return result
+        }
+        let swift = kinds(#"    let name = "Alex" // greet 42"#, .swift)
+        if swift["let"] != .keyword || swift[#""Alex""#] != .string || swift["// greet 42"] != .comment { problems.append("swift") }
+        let json = kinds(#"  "amount": 9.35,"#, .json)
+        if json[#""amount""#] != .key || json["9.35"] != .number { problems.append("json") }
+        let yaml = kinds("    runs-on: macos-15 # pinned", .yaml)
+        if yaml["runs-on"] != .key || yaml["# pinned"] != .comment { problems.append("yaml") }
+        let shell = kinds(#"echo "Port $PORT" ${WEB_PORT:-3000}"#, .shell)
+        if shell["echo"] != .keyword || shell["${WEB_PORT:-3000}"] != .variable { problems.append("shell") }
+        let python = kinds("def make_order(customer_id: str) -> dict:", .python)
+        if python["def"] != .keyword || python["make_order"] != .function { problems.append("python") }
+
+        let pairs = IntralineDiff.changedRanges(in: [
+            (.deleted, "        if attempt >= 3 { throw error }"),
+            (.deleted, "        try await Task.sleep(for: .seconds(attempt))"),
+            (.added, "        try await Task.sleep(for: retry.delay(after: attempt))"),
+        ])
+        if pairs[0] != nil || pairs[1] == nil || pairs[2] == nil { problems.append("intraline pairs the wrong lines") }
+        if let added = pairs[2], ("        try await Task.sleep(for: retry.delay(after: attempt))" as NSString).substring(with: added) != "retry.delay(after: " {
+            problems.append("intraline highlights the wrong span")
+        }
+        let wrapped = pane.metrics.layout(of: String(repeating: "word ", count: 60), isPlainASCII: true, rowWidth: 600)
+        if wrapped.lines.count < 2 || wrapped.lines.dropLast().contains(where: { ($0.location + $0.length) % 5 != 0 }) {
+            problems.append("long lines do not break after a space")
+        }
+        record("text_logic", ["problems": problems, "pass": problems.isEmpty])
+    }
+
+    /// The menus carry the window's shortcuts, and ⌘2 selects layer 2 from anywhere.
+    private func checkMenuShortcuts() async {
+        let items = NSApp.mainMenu.map(menuItems(in:)) ?? []
+        func has(_ title: String, _ key: String, _ modifiers: NSEvent.ModifierFlags) -> Bool {
+            items.contains { $0.title.hasPrefix(title) && $0.keyEquivalent.lowercased() == key && $0.keyEquivalentModifierMask == modifiers }
+        }
+        var missing: [String] = []
+        if !has("Open Repository", "o", .command) { missing.append("⌘O") }
+        if !has("Layer 1", "1", .command) || !has("Layer 9", "9", .command) { missing.append("⌘1 to ⌘9") }
+        if !has("Layer Above", "]", [.command, .shift]) && !has("Layer Above", "}", .command) { missing.append("⇧⌘]") }
+        if !has("Layer Below", "[", [.command, .shift]) && !has("Layer Below", "{", .command) { missing.append("⇧⌘[") }
+        if !has("Submit Review", "\r", [.command, .shift]) { missing.append("⇧⌘↩") }
+
+        model.selectLayer(atPosition: 1)
+        await window.settle()
+        if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime,
+                                        windowNumber: window.windowNumber, context: nil, characters: "2", charactersIgnoringModifiers: "2",
+                                        isARepeat: false, keyCode: 19) {
+            _ = NSApp.mainMenu?.performKeyEquivalent(with: event)
+        }
+        await window.settle(400)
+        record("menu_shortcuts", ["missing": missing, "layer_after_command_2": model.selectedLayer?.position ?? 0,
+                                  "pass": missing.isEmpty && model.selectedLayer?.position == 2])
+    }
+
+    private func menuItems(in menu: NSMenu) -> [NSMenuItem] {
+        menu.items.flatMap { item in [item] + (item.submenu.map(menuItems(in:)) ?? []) }
     }
 
     private func checkComposerSurvivesScrolling() async {
@@ -230,6 +302,67 @@ final class UISelfTest {
         let fired = pane.shortcutsFired.map(String.init)
         record("shortcuts_need_table_focus", ["fired": fired, "focused_thread": pane.focusedThreadID ?? -1,
                                               "pass": fired == ["n"] && pane.focusedThreadID != nil && pane.focusedThreadID != threadsBefore])
+    }
+
+    /// The whole loop by keyboard: j picks a line, c opens a composer, ⌘↩ adds the comment,
+    /// r and ⌥⌘↩ reply at once, the pretend agent answers, e resolves, and a submit is delivered.
+    private func checkReviewLoop() async {
+        (session.backend as? DemoReviewBackend)?.agentDelay = .milliseconds(300)
+        model.selectLayer(atPosition: 1)
+        await window.settle(400)
+        let pendingBefore = model.review.pendingCommentCount
+        window.makeFirstResponder(table)
+        type("j")
+        type("c")
+        await window.settle()
+        let composerOpened = window.firstResponder is ComposerTextView
+        type("Please rename this.")
+        press(keyCode: 36, characters: "\r", modifiers: .command)
+        await window.settle()
+        let created = model.layer?.threads.first { $0.comments.first?.body == "Please rename this." }
+        let added = created?.state == .draft && model.review.pendingCommentCount == pendingBefore + 1
+            && window.firstResponder === table && !pane.rows.contains { if case .composer = $0 { true } else { false } }
+
+        var repliedNow = false
+        var agentAnswered = false
+        var resolved = false
+        if let id = created?.id {
+            pane.setFocusedThread(id)
+            window.makeFirstResponder(table)
+            type("r")
+            await window.settle()
+            type("Actually, send it now.")
+            press(keyCode: 36, characters: "\r", modifiers: [.command, .option])
+            await window.settle()
+            let thread = model.layer?.threads.first { $0.id == id }
+            repliedNow = thread?.comments.last?.body == "Actually, send it now." && thread?.comments.last?.isPending == false
+            try? await Task.sleep(for: .milliseconds(500))
+            agentAnswered = model.layer?.threads.first { $0.id == id }?.comments.last?.author.isAgent == true
+            pane.setFocusedThread(id)
+            window.makeFirstResponder(table)
+            type("e")
+            await window.settle()
+            resolved = model.layer?.threads.first { $0.id == id }?.isResolved == true
+        }
+
+        session.windowState.summaryText = "Thanks, nearly there."
+        session.windowState.submit(model)
+        let submitted = model.review.lastSubmitted != nil && model.review.pendingCommentCount == 0
+        try? await Task.sleep(for: .milliseconds(500))
+        let delivered = model.review.lastSubmitted?.deliveredAt != nil
+        record("review_loop_by_keyboard", [
+            "composer_opened_by_c": composerOpened, "added_to_review": added, "replied_now": repliedNow,
+            "agent_answered": agentAnswered, "resolved_by_e": resolved, "submitted": submitted, "delivered": delivered,
+            "pass": composerOpened && added && repliedNow && agentAnswered && resolved && submitted && delivered,
+        ])
+    }
+
+    private func press(keyCode: UInt16, characters: String, modifiers: NSEvent.ModifierFlags) {
+        guard let event = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber, context: nil, characters: characters,
+            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode) else { return }
+        window.sendEvent(event)
     }
 
     private func checkHeights(_ name: String) {
