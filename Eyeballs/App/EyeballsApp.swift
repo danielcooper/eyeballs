@@ -25,6 +25,16 @@ struct EyeballsApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) lazy var session = AppSession()
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        if let folder = session.launch.screenshotFolder {
+            ScreenshotHarness(session: session).run(writingTo: folder)
+        } else if session.launch.runsUISelfTest {
+            UISelfTest(session: session).run()
+        }
+        #endif
+    }
+
     // Agents reach the app while its window is closed, so it keeps running.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
