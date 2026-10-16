@@ -56,6 +56,24 @@ struct GitRunnerTests {
         #expect(FileManager.default.fileExists(atPath: marker.path), "The fixture should prove the script runs without the guard")
     }
 
+    @Test func neverRunsAnExternalDiffProgram() async throws {
+        let fixture = try GitFixture()
+        let marker = fixture.root.appendingPathComponent("external-diff-ran")
+        try installMarkerScript(named: "external-diff.sh", marking: marker, in: fixture)
+        try fixture.write("a.txt", "a\n")
+        let base = try fixture.commit("one")
+        try fixture.write("a.txt", "b\n")
+        let head = try fixture.commit("two")
+        try fixture.git(["config", "diff.external", fixture.root.appendingPathComponent("external-diff.sh").path])
+
+        let files = try await fixture.repository().changedFiles(from: base, to: head)
+        #expect(files.count == 1)
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+
+        try fixture.git(["diff", base.hex, head.hex])
+        #expect(FileManager.default.fileExists(atPath: marker.path), "The fixture should prove the script runs without the guard")
+    }
+
     @Test(arguments: ["--output=/tmp/x", "-p", "", "main\nother"])
     func refusesRevisionsGitWouldMisread(revision: String) async throws {
         let fixture = try GitFixture()
