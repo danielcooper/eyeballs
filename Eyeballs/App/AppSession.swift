@@ -7,7 +7,7 @@ final class AppSession {
     let model = ReviewWindowModel()
     let windowState = ReviewWindowState()
     let launch = LaunchOptions(arguments: CommandLine.arguments, defaults: .standard)
-    private var backend: (any ReviewBackend)?
+    private(set) var backend: (any ReviewBackend)?
 
     init() {
         AppDefaults.register()

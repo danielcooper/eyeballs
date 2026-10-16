@@ -12,6 +12,7 @@ struct ThreadListView: View {
                 "No threads yet",
                 systemImage: "bubble.left.and.text.bubble.right",
                 description: Text("Click a line number, or the blue + beside a line, to start one."))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             List(selection: selection) {
                 ForEach(groups, id: \.title) { group in

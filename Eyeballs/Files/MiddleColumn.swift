@@ -16,11 +16,21 @@ struct MiddleColumn: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             Divider()
-            switch windowState.middleTab {
-            case .files: FileListView(model: model, windowState: windowState)
-            case .threads: ThreadListView(model: model, windowState: windowState)
+            Group {
+                if model.layer == nil, model.isLoadingLayer {
+                    ProgressView("Loading layer…")
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    switch windowState.middleTab {
+                    case .files: FileListView(model: model, windowState: windowState)
+                    case .threads: ThreadListView(model: model, windowState: windowState)
+                    }
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 440)
     }
 }
@@ -39,7 +49,7 @@ struct FileListView: View {
             List(selection: selection) {
                 OverviewRow(commitCount: layer.commits.count, layerThreads: layer.threads.filter { $0.anchor == .layer && !$0.isResolved }.count)
                     .tag(Item.overview)
-                Section(layer.files.count == 1 ? "1 file" : "\(layer.files.count) files") {
+                Section(Self.fileCountTitle(layer.files.count)) {
                     ForEach(layer.files) { file in
                         FileRow(file: file, threadCount: openThreads(in: file.path, of: layer))
                             .tag(Item.file(file.path))
@@ -50,6 +60,15 @@ struct FileListView: View {
             .scrollContentBackground(.hidden)
         } else {
             ContentUnavailableView("No layer", systemImage: "doc.on.doc", description: Text("Pick a layer to see its files."))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private static func fileCountTitle(_ count: Int) -> String {
+        switch count {
+        case 0: "No files changed"
+        case 1: "1 file"
+        default: "\(count) files"
         }
     }
 
@@ -130,7 +149,7 @@ struct FileRow: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .truncationMode(.head)
+                    .truncationMode(file.oldPath == nil ? .head : .middle)
             }
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 2) {
@@ -155,7 +174,10 @@ struct FileRow: View {
 
     private var folderLine: String {
         let folder = (file.path as NSString).deletingLastPathComponent
-        if let oldPath = file.oldPath { return "from \(oldPath)" }
+        if let oldPath = file.oldPath {
+            let sameFolder = (oldPath as NSString).deletingLastPathComponent == folder
+            return "from \(sameFolder ? (oldPath as NSString).lastPathComponent : oldPath)"
+        }
         return folder.isEmpty ? "/" : folder
     }
 
