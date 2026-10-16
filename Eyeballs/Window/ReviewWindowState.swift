@@ -214,6 +214,18 @@ enum ThreadFilter: Hashable, CaseIterable {
         }
     }
 
+    /// Says what a filtered list holds, such as "Showing outdated threads".
+    var showingText: String {
+        switch self {
+        case .all: "Showing all threads"
+        case .needsYou: "Showing threads that need you"
+        case .drafts: "Showing drafts"
+        case .waitingOnAgent: "Showing threads waiting on the agent"
+        case .outdated: "Showing outdated threads"
+        case .resolved: "Showing resolved threads"
+        }
+    }
+
     func includes(_ thread: ThreadItem) -> Bool {
         switch self {
         case .all: true

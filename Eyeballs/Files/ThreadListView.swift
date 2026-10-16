@@ -21,8 +21,8 @@ struct ThreadListView: View {
                     }
                     .pickerStyle(.inline)
                 } label: {
-                    Image(systemName: windowState.threadFilter == .all
-                          ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+                    Image(systemName: isFiltered ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        .foregroundStyle(isFiltered ? Color.accentColor : Color.secondary)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
@@ -32,7 +32,40 @@ struct ThreadListView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            if isFiltered {
+                filterLine
+            }
             content
+        }
+    }
+
+    private var isFiltered: Bool { windowState.threadFilter != .all }
+
+    /// "Showing outdated threads · 1 of 7", so a filtered list never passes for the whole list.
+    private var filterLine: some View {
+        let scoped = threadsInScope
+        let shown = scoped.filter(windowState.threadFilter.includes).count
+        return HStack(spacing: 8) {
+            Text("\(windowState.threadFilter.showingText) · \(shown) of \(scoped.count)")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 4)
+            Button("Show All") { windowState.threadFilter = .all }
+                .controlSize(.small)
+                .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// Every thread the scope covers, before the filter.
+    private var threadsInScope: [ThreadItem] {
+        switch windowState.threadScope {
+        case .thisLayer: model.layer?.threads ?? []
+        case .wholeStack: (model.selectedStack?.layers ?? []).flatMap { threads(onLayer: $0.id) }
         }
     }
 
@@ -46,7 +79,7 @@ struct ThreadListView: View {
                 ForEach(shown, id: \.title) { group in
                     Section {
                         ForEach(group.threads) { thread in
-                            ThreadListRow(thread: thread)
+                            ThreadListRow(thread: thread, showsState: group.showsState)
                                 .tag(thread.id)
                         }
                     } header: {
@@ -88,7 +121,7 @@ struct ThreadListView: View {
             return stack.layers.sorted { $0.position > $1.position }.compactMap { layer in
                 let threads = threads(onLayer: layer.id).filter(windowState.threadFilter.includes)
                     .sorted { ($0.state.listOrder, $0.id) < ($1.state.listOrder, $1.id) }
-                return threads.isEmpty ? nil : Group(title: "\(layer.position) \(layer.branch)", threads: threads)
+                return threads.isEmpty ? nil : Group(title: "Layer \(layer.position) · \(layer.branch)", threads: threads, showsState: true)
             }
         }
     }
@@ -110,15 +143,17 @@ struct ThreadListView: View {
     struct Group {
         var title: String
         var threads: [ThreadItem]
+        /// False when the heading already names every thread's state, as "Drafts" does.
+        var showsState: Bool
     }
 
     static func groups(_ threads: [ThreadItem]) -> [Group] {
         let sorted = threads.sorted { ($0.state.listOrder, $0.id) < ($1.state.listOrder, $1.id) }
         let candidates = [
-            Group(title: "Needs you", threads: sorted.filter { $0.state.needsYou }),
-            Group(title: "Drafts", threads: sorted.filter { $0.state == .draft }),
-            Group(title: "Waiting on agent", threads: sorted.filter { $0.state == .waitingOnAgent }),
-            Group(title: "Resolved", threads: sorted.filter { $0.state == .resolved }),
+            Group(title: "Needs you", threads: sorted.filter { $0.state.needsYou }, showsState: true),
+            Group(title: "Drafts", threads: sorted.filter { $0.state == .draft }, showsState: false),
+            Group(title: "Waiting on agent", threads: sorted.filter { $0.state == .waitingOnAgent }, showsState: false),
+            Group(title: "Resolved", threads: sorted.filter { $0.state == .resolved }, showsState: false),
         ]
         return candidates.filter { !$0.threads.isEmpty }
     }
@@ -126,20 +161,21 @@ struct ThreadListView: View {
 
 private struct ThreadListRow: View {
     let thread: ThreadItem
+    let showsState: Bool
 
     private var lastComment: CommentItem? { thread.comments.last }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
-                ThreadStateChip(state: thread.state)
-                if thread.isOutdated {
-                    Chip(text: "Outdated", symbol: "clock.arrow.circlepath", tint: .gray, isSmall: true)
+            if showsState || thread.isOutdated {
+                HStack(spacing: 4) {
+                    if showsState {
+                        ThreadStateChip(state: thread.state)
+                    }
+                    if thread.isOutdated {
+                        Chip(text: "Outdated", symbol: "clock.arrow.circlepath", tint: .gray, isSmall: true)
+                    }
                 }
-                Spacer(minLength: 4)
-                Text("t\(thread.id)")
-                    .font(.subheadline.monospaced())
-                    .foregroundStyle(.tertiary)
             }
             ThreadLocationText(anchor: thread.anchor)
             if let lastComment {
