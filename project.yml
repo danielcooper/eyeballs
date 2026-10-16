@@ -1,0 +1,99 @@
+name: Eyeballs
+options:
+  bundleIdPrefix: coops
+  deploymentTarget:
+    macOS: "15.0"
+  xcodeVersion: "16.3"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+packages:
+  EyeballsCore:
+    path: Packages/EyeballsCore
+  ArgumentParser:
+    url: https://github.com/apple/swift-argument-parser.git
+    exactVersion: "1.8.2"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    DEVELOPMENT_TEAM: HGQW7A6TH6
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    EYEBALLS_URL_SCHEME: eyeballs
+  configs:
+    Debug:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+      EYEBALLS_URL_SCHEME: eyeballs-debug
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: -O
+
+targets:
+  Eyeballs:
+    type: application
+    platform: macOS
+    sources:
+      - Eyeballs
+    dependencies:
+      - package: EyeballsCore
+        product: EyeballsCore
+      - target: eyeballs-cli
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
+    info:
+      path: Eyeballs/Info.plist
+      properties:
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        EyeballsURLScheme: "$(EYEBALLS_URL_SCHEME)"
+        CFBundleURLTypes:
+          - CFBundleURLName: coops.eyeballs
+            CFBundleURLSchemes: ["$(EYEBALLS_URL_SCHEME)"]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: coops.eyeballs
+        PRODUCT_NAME: Eyeballs
+        GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_CFBundleDisplayName: Eyeballs
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 Daniel Cooper. Licensed under the GNU GPL v3."
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: coops.eyeballs.debug
+          INFOPLIST_KEY_CFBundleDisplayName: Eyeballs Debug
+
+  eyeballs-cli:
+    type: tool
+    platform: macOS
+    sources:
+      - CLI
+    dependencies:
+      - package: EyeballsCore
+        product: EyeballsKit
+      - package: ArgumentParser
+        product: ArgumentParser
+    settings:
+      base:
+        PRODUCT_NAME: eyeballs
+        PRODUCT_MODULE_NAME: EyeballsCLI
+        PRODUCT_BUNDLE_IDENTIFIER: coops.eyeballs.cli
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: YES
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        OTHER_CODE_SIGN_FLAGS: "$(inherited) -i $(PRODUCT_BUNDLE_IDENTIFIER)"
+
+schemes:
+  Eyeballs:
+    build:
+      targets:
+        Eyeballs: all
+    test:
+      targets:
+        - package: EyeballsCore/EyeballsCoreTests
