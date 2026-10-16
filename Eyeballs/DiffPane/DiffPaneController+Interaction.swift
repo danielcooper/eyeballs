@@ -33,6 +33,22 @@ final class DiscardedComposer: NSObject {
     }
 }
 
+/// What Edit > Undo needs to bring back a pending comment you deleted.
+final class DeletedComment: NSObject {
+    let body: String
+    let anchor: ThreadAnchor
+    let layerID: Int
+    /// Nil when deleting the comment removed its thread too, so Undo starts the thread again.
+    let threadID: Int?
+
+    init(body: String, anchor: ThreadAnchor, layerID: Int, threadID: Int?) {
+        self.body = body
+        self.anchor = anchor
+        self.layerID = layerID
+        self.threadID = threadID
+    }
+}
+
 enum DragMode: Equatable {
     case none
     case lines(opensComposer: Bool)
@@ -82,20 +98,52 @@ extension DiffPaneController {
         if let index = indexByID[.thread(id)] { revealThreadRow(index) }
     }
 
+    /// Scrolls so the thread's own code shows above its card, never just the card under the header.
     private func revealThreadRow(_ index: Int) {
         guard case .thread(let content) = rows[index] else { return }
         tableView.layoutSubtreeIfNeeded()
+        guard case .lines(let range) = content.thread.anchor, let start = firstCodeRow(of: range, above: index) else {
+            jump(toRow: index)
+            return
+        }
+        let context = 2 * metrics.lineHeight
         let threadRect = tableView.rect(ofRow: index)
-        if case .lines(let range) = content.thread.anchor,
-           let start = lineRowIndex(path: range.path, side: range.side, line: range.start), start < index {
-            let context = 2 * metrics.lineHeight
-            let available = visibleRect.height - stickyHeaderHeight(above: start)
-            if threadRect.maxY - tableView.rect(ofRow: start).minY + context <= available {
-                jump(toRow: start, leavingAbove: context)
-                return
+        let startTop = tableView.rect(ofRow: start).minY
+        let available = visibleRect.height - stickyHeaderHeight(above: start)
+        if threadRect.maxY - startTop + context <= available || threadRect.minY - startTop <= available / 2 {
+            jump(toRow: start, leavingAbove: context)
+        } else {
+            jump(toRow: codeRow(countingUp: 3, from: index) ?? start)
+        }
+    }
+
+    /// The first row of `range` that the pane shows above the thread's card. When the range
+    /// starts inside a folded gap, this is its first shown line; when none of it shows, the
+    /// code row three above the card.
+    func firstCodeRow(of range: LineRange, above threadRow: Int) -> Int? {
+        guard let header = fileHeaderIndex(containing: threadRow), header + 1 < threadRow else { return nil }
+        for index in (header + 1)..<threadRow {
+            if let code = rows[index].code, code.path == range.path, let number = code.number(on: range.side),
+               (range.start...range.end).contains(number) {
+                return index
             }
         }
-        jump(toRow: index)
+        return codeRow(countingUp: 3, from: threadRow)
+    }
+
+    /// The code row `count` code rows above `row`, or the highest one in the same file.
+    private func codeRow(countingUp count: Int, from row: Int) -> Int? {
+        var found: Int?
+        var seen = 0
+        var index = row - 1
+        while index >= 0, !rows[index].isFileHeader, seen < count {
+            if rows[index].code != nil {
+                found = index
+                seen += 1
+            }
+            index -= 1
+        }
+        return found
     }
 
     func lineRowIndex(path: String, side: Side, line: Int) -> Int? {
@@ -109,6 +157,13 @@ extension DiffPaneController {
     }
 
     // MARK: View state changes
+
+    /// Ticks or clears a file's Viewed box. A viewed file folds away, as on GitHub.
+    func setViewed(_ viewed: Bool, path: String) {
+        guard let layer = model.layer, let file = layer.files.first(where: { $0.path == path }) else { return }
+        windowState.setViewed(viewed, file: file, layerID: layer.layerID)
+        setFile(path, collapsed: viewed)
+    }
 
     func setFile(_ path: String, collapsed: Bool) {
         let headerWasPinned = indexByID[.fileHeader(path)].map { tableView.rect(ofRow: $0).minY < visibleRect.minY } ?? false
@@ -163,6 +218,19 @@ extension DiffPaneController {
         rebuild()
         redrawVisibleCodeRows()
         focusComposer(key)
+    }
+
+    /// Opens the layer comment the window asked for, such as a request to restack, once its
+    /// layer shows. A draft you already started there is kept.
+    func openLayerCommentWaitingForLoad() {
+        guard let pending = windowState.layerCommentToOpenAfterLoad, pending.layerID == shownLayerID else { return }
+        windowState.layerCommentToOpenAfterLoad = nil
+        let key = ComposerKey.draft(.newThread(.layer))
+        if draftText(for: key).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            liveDrafts[key] = pending.text
+            scheduleDraftSave(for: key)
+        }
+        openComposer(key)
     }
 
     func focusComposer(_ key: ComposerKey) {
@@ -299,12 +367,98 @@ extension DiffPaneController {
             },
             toggleExpanded: { [weak self] in self?.afterThisEvent { $0.toggleResolvedExpanded(threadID) } },
             edit: { [weak self] commentID in self?.afterThisEvent { $0.openComposer(.edit(commentID: commentID)) } },
-            delete: { [weak self] commentID in
-                self?.afterThisEvent { pane in
+            delete: { [weak self] commentID in self?.afterThisEvent { $0.deleteComment(commentID, inThread: threadID) } },
+            deleteThread: { [weak self] in self?.afterThisEvent { $0.deleteThread(threadID) } })
+    }
+
+    func overviewActions() -> OverviewActions {
+        OverviewActions(
+            commentOnLayer: { [weak self] in self?.afterThisEvent { $0.openComposer(.draft(.newThread(.layer))) } },
+            showLayer: { [weak self] position in self?.afterThisEvent { $0.model.selectLayer(atPosition: position) } })
+    }
+
+    func footerActions() -> FooterActions {
+        FooterActions(
+            showLayer: { [weak self] position in self?.afterThisEvent { $0.model.selectLayer(atPosition: position) } },
+            finishReview: { [weak self] in self?.afterThisEvent { $0.windowState.finishReview($0.model) } })
+    }
+
+    // MARK: Deleting
+
+    /// Deletes one of your comments. A pending one goes at once, and Edit > Undo brings it back.
+    /// A sent one asks first, because the agent may already have read it.
+    func deleteComment(_ commentID: Int, inThread threadID: Int) {
+        guard let thread = model.layer?.threads.first(where: { $0.id == threadID }),
+              let comment = thread.comments.first(where: { $0.id == commentID }) else { return }
+        guard comment.isPending else {
+            confirmDeletion(
+                title: "Delete this comment?",
+                message: "You've sent it, so \(agentName) may already have read it. Deleting it takes it out of the thread for you both.",
+                button: "Delete Comment") { pane in
                     pane.model.deleteComment(commentID)
                     pane.rebuild()
                 }
-            })
+            return
+        }
+        model.deleteComment(commentID)
+        rebuild()
+        registerUndo(of: comment, in: thread, removesThread: thread.comments.count == 1)
+    }
+
+    /// Deletes a whole thread. A thread that is one pending comment goes at once, with Undo.
+    /// Any other asks first, because it holds more than one comment or the agent may have read it.
+    func deleteThread(_ threadID: Int) {
+        guard let thread = model.layer?.threads.first(where: { $0.id == threadID }) else { return }
+        if thread.comments.count == 1, let comment = thread.comments.first, comment.isPending {
+            model.deleteThread(threadID)
+            rebuild()
+            registerUndo(of: comment, in: thread, removesThread: true)
+            return
+        }
+        let message = thread.hasSentComments
+            ? "You've sent it, so \(agentName) may already have read it. Every comment in it goes, the replies too."
+            : "All \(thread.comments.count) comments in it go too."
+        confirmDeletion(title: "Delete this thread?", message: message, button: "Delete Thread") { pane in
+            pane.model.deleteThread(threadID)
+            pane.rebuild()
+        }
+    }
+
+    private var agentName: String { model.agent.agentName ?? "the agent" }
+
+    private func registerUndo(of comment: CommentItem, in thread: ThreadItem, removesThread: Bool) {
+        guard let undo = tableView.window?.undoManager, let layerID = model.layer?.layerID else { return }
+        let deleted = DeletedComment(body: comment.body, anchor: thread.anchor, layerID: layerID, threadID: removesThread ? nil : thread.id)
+        undo.registerUndo(withTarget: self, selector: #selector(restoreDeletedComment(_:)), object: deleted)
+        undo.setActionName("Delete Comment")
+    }
+
+    @objc private func restoreDeletedComment(_ deleted: DeletedComment) {
+        if model.selection?.layerID != deleted.layerID, let stack = model.selectedStack {
+            model.select(LayerSelection(stackID: stack.id, layerID: deleted.layerID))
+        }
+        if let threadID = deleted.threadID, model.layer?.threads.contains(where: { $0.id == threadID }) == true {
+            model.reply(deleted.body, to: threadID, sendNow: false)
+        } else {
+            model.addComment(deleted.body, at: deleted.anchor, sendNow: false)
+        }
+        rebuild()
+    }
+
+    private func confirmDeletion(title: String, message: String, button: String, then delete: @escaping @MainActor (DiffPaneController) -> Void) {
+        guard let window = tableView.window else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: button).hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            MainActor.assumeIsolated {
+                guard response == .alertFirstButtonReturn, let self else { return }
+                delete(self)
+            }
+        }
     }
 
     /// Runs work once the current click has finished, so a card never rebuilds under its own button.
@@ -417,6 +571,10 @@ extension DiffPaneController {
            let number = selection.side == .head ? new : old, selection.lines.contains(number) {
             return true
         }
+        if let range = focusedRange, range.path == path, let number = range.side == .head ? new : old,
+           (range.start...range.end).contains(number) {
+            return true
+        }
         for key in viewState.openComposers {
             guard case .draft(.newThread(.lines(let range))) = key, range.path == path,
                   let number = range.side == .head ? new : old else { continue }
@@ -450,6 +608,7 @@ extension DiffPaneController {
 
     func clearSelections() {
         lineSelection = nil
+        setFocusedThread(nil)
         clearTextSelection()
         redrawVisibleCodeRows()
     }
@@ -520,6 +679,7 @@ extension DiffPaneController {
         case "c": commentOnSelectedLines()
         case "r": replyToFocusedThread()
         case "e": toggleFocusedThreadResolved()
+        case "v": toggleViewedOfCurrentFile()
         default: return false
         }
         shortcutsFired.append(character)
@@ -559,22 +719,51 @@ extension DiffPaneController {
         redrawVisibleCodeRows()
     }
 
+    /// Focuses the next or previous thread. Looking for threads that need you, it carries on
+    /// to the next layer that has one once this layer has none left.
     func moveThreadFocus(by step: Int, needingYouOnly: Bool) {
         let candidates = rows.indices.filter { index in
             guard case .thread(let content) = rows[index] else { return false }
             return !needingYouOnly || content.thread.state.needsYou
         }
+        let current = focusedThreadID.flatMap { indexByID[.thread($0)] } ?? (firstRowBelowHeader() - (step > 0 ? 1 : 0))
+        let following = step > 0 ? candidates.first { $0 > current } : candidates.last { $0 < current }
+        if needingYouOnly, following == nil, moveToNextLayerNeedingYou() { return }
         guard !candidates.isEmpty else {
             NSSound.beep()
             return
         }
-        let current = focusedThreadID.flatMap { indexByID[.thread($0)] } ?? (firstRowBelowHeader() - (step > 0 ? 1 : 0))
-        let next = step > 0
-            ? candidates.first { $0 > current } ?? candidates[0]
-            : candidates.last { $0 < current } ?? candidates[candidates.count - 1]
+        let next = following ?? (step > 0 ? candidates[0] : candidates[candidates.count - 1])
         guard let id = rows[next].threadID else { return }
         setFocusedThread(id)
         revealThreadRow(next)
+    }
+
+    /// Switches to the nearest layer above with a thread that needs you, wrapping round to the
+    /// bottom of the stack, and focuses its first such thread once it loads. Returns false when
+    /// no other layer has one.
+    private func moveToNextLayerNeedingYou() -> Bool {
+        guard let stack = model.selectedStack, let layer = model.selectedLayer else { return false }
+        let ordered = stack.layers.filter { $0.id != layer.id }.sorted { lhs, rhs in
+            (lhs.position < layer.position ? 1 : 0, lhs.position) < (rhs.position < layer.position ? 1 : 0, rhs.position)
+        }
+        let target = ordered.first { other in
+            if let threads = model.threadsByLayer[other.id] { return threads.contains { $0.state.needsYou } }
+            return other.needsYouCount > 0
+        }
+        guard let target else { return false }
+        layerAwaitingFirstThreadNeedingYou = target.id
+        model.select(LayerSelection(stackID: stack.id, layerID: target.id))
+        return true
+    }
+
+    /// Focuses the first thread on the shown layer that needs you, after a jump from another layer.
+    func revealFirstThreadNeedingYou() {
+        layerAwaitingFirstThreadNeedingYou = nil
+        guard let index = rows.indices.first(where: { rows[$0].thread?.state.needsYou == true }),
+              let id = rows[index].threadID else { return }
+        setFocusedThread(id)
+        revealThreadRow(index)
     }
 
     func moveFile(by step: Int) {
@@ -618,13 +807,22 @@ extension DiffPaneController {
     }
 
     private func toggleFocusedThreadResolved() {
-        guard let id = focusedThreadID, let thread = model.layer?.threads.first(where: { $0.id == id }) else {
+        guard let id = focusedThreadID, let thread = model.layer?.threads.first(where: { $0.id == id }), thread.state != .draft else {
             NSSound.beep()
             return
         }
         model.setResolved(!thread.isResolved, threadID: id)
         if thread.isResolved { viewState.expandedResolvedThreads.remove(id) }
         rebuild()
+    }
+
+    private func toggleViewedOfCurrentFile() {
+        guard let layer = model.layer, let path = lineSelection?.path ?? windowState.currentFilePath,
+              let file = layer.files.first(where: { $0.path == path }) else {
+            NSSound.beep()
+            return
+        }
+        setViewed(!windowState.isViewed(file, layerID: layer.layerID), path: path)
     }
 
     /// The first row whose top is at or below the bottom of the floating header.

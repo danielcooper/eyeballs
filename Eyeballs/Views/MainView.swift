@@ -12,7 +12,7 @@ struct MainView: View {
                 NothingToReviewView(model: model)
             } else {
                 NavigationSplitView(columnVisibility: $columns) {
-                    SidebarView(model: model)
+                    SidebarView(model: model, windowState: windowState)
                 } content: {
                     MiddleColumn(model: model, windowState: windowState)
                 } detail: {
@@ -24,8 +24,11 @@ struct MainView: View {
         .navigationTitle(model.selectedStack?.name ?? "Eyeballs")
         .navigationSubtitle(subtitle)
         .toolbar {
+            ToolbarItemGroup(placement: .navigation) {
+                LayerNavigator(model: model, windowState: windowState)
+            }
             ToolbarItem(placement: .primaryAction) {
-                AgentStatusCapsule(status: model.agent)
+                AgentStatusMenu(model: model)
             }
         }
         .frame(minWidth: 1000, minHeight: 620)
@@ -41,25 +44,37 @@ struct MainView: View {
     }
 }
 
-/// Says in words whether an agent is listening, with a dot that only repeats the words.
-struct AgentStatusCapsule: View {
-    let status: AgentStatus
+/// Says in words whether an agent is listening, with a dot that only repeats the words. Its
+/// menu holds Copy prompt, which the review bar shows only while no agent is listening.
+struct AgentStatusMenu: View {
+    let model: ReviewWindowModel
+
+    private var status: AgentStatus { model.agent }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(status.isListening ? Color.green : Color.secondary.opacity(0.55))
-                .frame(width: 8, height: 8)
+        Menu {
             Text(status.text)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(status.isListening ? .primary : .secondary)
-                .lineLimit(1)
+            Divider()
+            Button("Copy Agent Prompt") { model.copyAgentPrompt() }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "circle.fill")
+                    .font(.caption2)
+                    .imageScale(.small)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(status.isListening ? Color.green : Color.secondary)
+                Text(status.text)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(status.isListening ? .primary : .secondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 8)
+            .fixedSize()
         }
-        .padding(.horizontal, 8)
+        .menuIndicator(.hidden)
         .fixedSize()
-        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Agent: \(status.text)")
-        .help(status.isListening ? "An agent is waiting for your review" : "No agent is waiting. Use Copy prompt to hand the review to one.")
+        .help(status.isListening ? "An agent is waiting for your review. Click for Copy prompt." : "No agent is waiting. Click to copy a prompt that hands the review to one.")
     }
 }
 

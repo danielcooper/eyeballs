@@ -25,7 +25,7 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
     private var refreshIsScheduled = false
 
     private let threadMeasurer = NSHostingController(rootView: ThreadRowRoot.placeholder)
-    private let overviewMeasurer = NSHostingController(rootView: LayerOverviewCard(content: .placeholder))
+    private let overviewMeasurer = NSHostingController(rootView: LayerOverviewCard(content: .placeholder, actions: OverviewActions()))
     private var threadHeights: [ThreadHeightKey: (content: ThreadRowContent, height: CGFloat)] = [:]
     private var overviewHeight: (content: OverviewContent, width: Int, height: CGFloat)?
     private var tokenCache: [RowID: [SyntaxToken]] = [:]
@@ -35,6 +35,11 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
     var dragMode = DragMode.none
     private(set) var hoveredRowID: RowID?
     private(set) var focusedThreadID: Int?
+    /// The lines of the focused thread, tinted so you can see what it is about.
+    private(set) var focusedRange: LineRange?
+    /// Set by `a` when it moves on to another layer, so the pane focuses that layer's first
+    /// thread that needs you as soon as it shows.
+    var layerAwaitingFirstThreadNeedingYou: Int?
     var liveDrafts: [ComposerKey: String] = [:]
     var draftSaves: [ComposerKey: Task<Void, Never>] = [:]
     /// Every single-letter shortcut the table acted on, for the self-test.
@@ -104,6 +109,7 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
         }
         if layer.layerID != shownLayerID {
             show(layer)
+            actOnRequestsWaitingForLoad()
             return
         }
         var gutterChanged = false
@@ -115,6 +121,17 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
         shownLayer = layer
         rebuild()
         if gutterChanged { recomputeAllHeights() }
+        actOnRequestsWaitingForLoad()
+    }
+
+    /// Carries out what the window asked for before this layer had loaded: a thread to show, a
+    /// layer comment to open, or the first thread that needs you.
+    private func actOnRequestsWaitingForLoad() {
+        openLayerCommentWaitingForLoad()
+        if let layerID = layerAwaitingFirstThreadNeedingYou, layerID == shownLayerID { revealFirstThreadNeedingYou() }
+        guard let id = windowState.threadToRevealAfterLoad, shownLayer?.threads.contains(where: { $0.id == id }) == true else { return }
+        windowState.threadToRevealAfterLoad = nil
+        revealThread(id)
     }
 
     // MARK: Showing a layer
@@ -131,6 +148,7 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
         textSelection = nil
         hoveredRowID = nil
         focusedThreadID = nil
+        focusedRange = nil
         windowState.focusedThreadID = nil
         tokenCache.removeAll()
         threadHeights.removeAll()
@@ -165,9 +183,11 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
 
     private func buildRows() -> [DiffRow] {
         guard let shownLayer else { return [] }
+        let viewed = Set(shownLayer.files.filter { windowState.isViewed($0, layerID: shownLayer.layerID) }.map(\.path))
         return DiffRowBuilder(
             prepared: prepared, layer: shownLayer, layerItem: model.selectedLayer, stack: model.selectedStack,
-            state: viewState, codeColumnInset: Double(metrics.codeX)).build()
+            state: viewState, codeColumnInset: Double(metrics.codeX), viewedPaths: viewed,
+            agentName: model.agent.agentName).build()
     }
 
     // MARK: Applying changes
@@ -285,10 +305,11 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
         case .gap: GapRowView.height
         case .code(let code): metrics.height(of: code.displayText, isPlainASCII: code.isPlainASCII, rowWidth: rowWidth)
         case .notice: NoticeRowView.height
+        case .image(let content): ImagePreviewRowView.height(of: content, rowWidth: rowWidth, inset: metrics.codeX)
         case .bigFile: BigFileRowView.height
         case .thread(let content): measureThread(content)
         case .composer(let content): ComposerRowView.height(forText: draftText(for: content.key), rowWidth: rowWidth, content: content)
-        case .footer: FooterRowView.height
+        case .footer: LayerFooterView.height
         }
     }
 
@@ -309,7 +330,7 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
 
     private func measureOverview(_ content: OverviewContent) -> CGFloat {
         if let cached = overviewHeight, cached.content == content, cached.width == Int(rowWidth) { return cached.height }
-        overviewMeasurer.rootView = LayerOverviewCard(content: content)
+        overviewMeasurer.rootView = LayerOverviewCard(content: content, actions: OverviewActions())
         let size = overviewMeasurer.sizeThatFits(in: CGSize(width: rowWidth, height: .greatestFiniteMagnitude))
         let height = ceil(size.height)
         overviewHeight = (content, Int(rowWidth), height)
@@ -348,16 +369,17 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let content = rows[row]
         let view: NSView = switch content {
-        case .overview: reuse(Self.overviewIdentifier) { HostingRowView(identifier: Self.overviewIdentifier, rootView: LayerOverviewCard(content: .placeholder)) }
+        case .overview: reuse(Self.overviewIdentifier) { HostingRowView(identifier: Self.overviewIdentifier, rootView: LayerOverviewCard(content: .placeholder, actions: OverviewActions())) }
         case .fileHeader: reuse(FileHeaderView.identifier) { FileHeaderView() }
         case .hunkHeader: reuse(HunkHeaderView.identifier) { HunkHeaderView() }
         case .gap: reuse(GapRowView.identifier) { GapRowView() }
         case .code: reuse(CodeRowView.identifier) { CodeRowView() }
         case .notice: reuse(NoticeRowView.identifier) { NoticeRowView() }
+        case .image: reuse(ImagePreviewRowView.identifier) { ImagePreviewRowView() }
         case .bigFile: reuse(BigFileRowView.identifier) { BigFileRowView() }
         case .thread: reuse(Self.threadIdentifier) { HostingRowView(identifier: Self.threadIdentifier, rootView: ThreadRowRoot.placeholder) }
         case .composer: reuse(ComposerRowView.identifier) { ComposerRowView() }
-        case .footer: reuse(FooterRowView.identifier) { FooterRowView() }
+        case .footer: reuse(Self.footerIdentifier) { HostingRowView(identifier: Self.footerIdentifier, rootView: LayerFooterView.placeholder) }
         }
         configure(view, for: content)
         return view
@@ -365,6 +387,7 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
 
     static let threadIdentifier = NSUserInterfaceItemIdentifier("thread")
     static let overviewIdentifier = NSUserInterfaceItemIdentifier("overview")
+    static let footerIdentifier = NSUserInterfaceItemIdentifier("footer")
 
     private func reuse<View: NSView>(_ identifier: NSUserInterfaceItemIdentifier, make: () -> View) -> View {
         if let view = tableView.makeView(withIdentifier: identifier, owner: nil) as? View { return view }
@@ -376,20 +399,20 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
     func configure(_ view: NSView, for row: DiffRow) {
         switch row {
         case .overview(let content):
-            (view as? HostingRowView<LayerOverviewCard>)?.host.rootView = LayerOverviewCard(content: content) { [weak self] in
-                self?.openComposer(.draft(.newThread(.layer)))
-            }
+            (view as? HostingRowView<LayerOverviewCard>)?.host.rootView = LayerOverviewCard(content: content, actions: overviewActions())
         case .fileHeader(let content): (view as? FileHeaderView)?.show(content, pane: self)
         case .hunkHeader(let content): (view as? HunkHeaderView)?.show(content, pane: self)
         case .gap(let content): (view as? GapRowView)?.show(content, pane: self)
         case .code(let content): (view as? CodeRowView)?.show(content, pane: self)
         case .notice(let content): (view as? NoticeRowView)?.show(content, pane: self)
+        case .image(let content): (view as? ImagePreviewRowView)?.show(content, pane: self)
         case .bigFile(let content): (view as? BigFileRowView)?.show(content, pane: self)
         case .thread(let content):
             (view as? HostingRowView<ThreadRowRoot>)?.host.rootView = ThreadRowRoot(
                 content: content, isFocused: focusedThreadID == content.thread.id, actions: cardActions(for: content.thread.id))
         case .composer(let content): (view as? ComposerRowView)?.show(content, text: draftText(for: content.key), pane: self)
-        case .footer: break
+        case .footer(let content):
+            (view as? HostingRowView<LayerFooterView>)?.host.rootView = LayerFooterView(content: content, actions: footerActions())
         }
     }
 
@@ -426,7 +449,11 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
         let old = focusedThreadID
         focusedThreadID = id
         windowState.focusedThreadID = id
+        let range: LineRange? = if case .lines(let range) = shownLayer?.threads.first(where: { $0.id == id })?.anchor { range } else { nil }
+        let rangeChanged = range != focusedRange
+        focusedRange = range
         for threadID in [old, id].compactMap({ $0 }) { reconfigureRow(.thread(threadID)) }
+        if rangeChanged { redrawVisibleCodeRows() }
     }
 
     // MARK: Scrolling
@@ -515,5 +542,6 @@ extension ThreadRowRoot {
 }
 
 extension OverviewContent {
-    static let placeholder = OverviewContent(layer: nil, layerCount: 0, parentBranch: nil, commits: [], fileCount: 0, additions: 0, deletions: 0, threadCount: 0)
+    static let placeholder = OverviewContent(layer: nil, layerCount: 0, parentBranch: nil, parentLayer: nil, commits: [],
+                                             fileCount: 0, additions: 0, deletions: 0, threadCount: 0)
 }

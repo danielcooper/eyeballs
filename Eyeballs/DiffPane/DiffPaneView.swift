@@ -8,6 +8,7 @@ struct DiffPaneView: NSViewControllerRepresentable {
     let layer: LayerContent?
     let layerItem: LayerItem?
     let stack: StackItem?
+    let viewedFiles: [String: FileFingerprint]
 
     func makeNSViewController(context: Context) -> DiffPaneController {
         let controller = DiffPaneController(model: model, windowState: windowState)

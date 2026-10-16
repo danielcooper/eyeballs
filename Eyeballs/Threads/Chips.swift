@@ -11,16 +11,6 @@ struct ThreadStateChip: View {
     }
 }
 
-struct ReplyStatusChip: View {
-    let status: ReplyStatus
-
-    var body: some View {
-        Chip(text: status.label, symbol: status.symbol, tint: status.tint, isSmall: true)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Reply: \(status.label)")
-    }
-}
-
 struct LayerStatusChip: View {
     let status: LayerStatus
 
@@ -43,17 +33,17 @@ struct Chip: View {
         HStack(spacing: 4) {
             if let symbol {
                 Image(systemName: symbol)
-                    .font(.system(size: isSmall ? 9 : 10, weight: .bold))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(tint)
             }
             Text(text)
-                .font(.system(size: isSmall ? 10.5 : 11, weight: .semibold))
+                .font(isSmall ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .fixedSize()
         }
         .padding(.horizontal, isSmall ? 6 : 8)
-        .padding(.vertical, isSmall ? 1.5 : 2.5)
+        .padding(.vertical, 2)
         .background(Capsule().fill(tint.opacity(0.13)))
         .overlay(Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 1))
     }
@@ -91,24 +81,6 @@ extension ThreadState {
         case .draft: 3
         case .waitingOnAgent: 4
         case .resolved: 5
-        }
-    }
-}
-
-extension ReplyStatus {
-    var symbol: String {
-        switch self {
-        case .addressed: "checkmark"
-        case .declined: "xmark"
-        case .question: "questionmark"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .addressed: .green
-        case .declined: .red
-        case .question: .orange
         }
     }
 }
@@ -163,11 +135,11 @@ struct AvatarView: View {
             Circle().fill(fill)
             if author.isAgent {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
             } else {
                 Text(initials)
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(.white)
             }
         }

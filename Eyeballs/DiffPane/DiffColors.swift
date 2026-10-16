@@ -27,7 +27,8 @@ enum DiffColors {
     static let selectedLine = adaptive(light: rgb(0xFFF8C5), dark: rgba(187, 128, 9, 0.18))
     static let selectedGutter = adaptive(light: rgba(212, 167, 44, 0.42), dark: rgba(187, 128, 9, 0.45))
 
-    static let lineNumber = adaptive(light: rgba(31, 35, 40, 0.50), dark: rgba(240, 246, 252, 0.42))
+    /// Primer's muted grey, for context lines only: on a tinted gutter it falls below 4.5:1.
+    static let lineNumber = adaptive(light: rgb(0x59636E), dark: rgb(0x9198A1))
     static let marker = adaptive(light: rgba(31, 35, 40, 0.55), dark: rgba(240, 246, 252, 0.50))
     static let code = adaptive(light: rgb(0x1F2328), dark: rgb(0xE6EDF3))
     static let commentButton = adaptive(light: rgb(0x0969DA), dark: rgb(0x1F6FEB))
@@ -37,6 +38,8 @@ enum DiffColors {
     static let cardBackground = adaptive(light: rgb(0xFFFFFF), dark: rgb(0x242424))
     static let cardHeader = adaptive(light: rgb(0xF6F8FA), dark: rgb(0x2B2B2B))
     static let codeBlock = adaptive(light: rgb(0xF6F8FA), dark: rgb(0x1A1A1A))
+    static let checkerLight = adaptive(light: rgb(0xFFFFFF), dark: rgb(0x2A2A2A))
+    static let checkerDark = adaptive(light: rgb(0xEEF1F4), dark: rgb(0x353535))
 
     static let keyword = adaptive(light: rgb(0xCF222E), dark: rgb(0xFF7B72))
     static let string = adaptive(light: rgb(0x0A3069), dark: rgb(0xA5D6FF))

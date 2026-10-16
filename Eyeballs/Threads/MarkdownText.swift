@@ -24,7 +24,7 @@ struct MarkdownText: View {
         case .paragraph(let text):
             inline(text)
         case .bullets(let items):
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text("•").foregroundStyle(.secondary)
@@ -39,11 +39,11 @@ struct MarkdownText: View {
             }
         case .code(let code):
             Text(code)
-                .font(.system(size: 12, design: .monospaced))
+                .font(.callout.monospaced())
                 .lineSpacing(2)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color.codeBlock))
@@ -53,7 +53,7 @@ struct MarkdownText: View {
 
     private func inline(_ text: String) -> some View {
         Text(Self.attributed(text))
-            .font(.system(size: 13))
+            .font(.body)
             .lineSpacing(2)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)

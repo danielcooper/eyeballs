@@ -42,7 +42,7 @@ final class CodeRowView: NSView {
             let color = pane.isTableFocused ? NSColor.selectedTextBackgroundColor : NSColor.unemphasizedSelectedTextBackgroundColor
             fill(range: selected, in: layout, text: content.displayText, metrics: metrics, color: color, rounded: false)
         }
-        drawNumbers(content: content, metrics: metrics)
+        drawNumbers(content: content, metrics: metrics, isSelectedLine: isSelectedLine)
         drawCode(content: content, layout: layout, metrics: metrics, tokens: pane.tokens(for: content))
         if pane.hoveredRowID == rowID, content.commentLine != nil {
             drawCommentButton(metrics: metrics)
@@ -71,8 +71,9 @@ final class CodeRowView: NSView {
         }
     }
 
-    private func drawNumbers(content: CodeRowContent, metrics: CodeMetrics) {
-        let attributes: [NSAttributedString.Key: Any] = [.font: metrics.font, .foregroundColor: DiffColors.lineNumber]
+    private func drawNumbers(content: CodeRowContent, metrics: CodeMetrics, isSelectedLine: Bool) {
+        let color = content.line.kind == .context && !isSelectedLine ? DiffColors.lineNumber : DiffColors.code
+        let attributes: [NSAttributedString.Key: Any] = [.font: metrics.font, .foregroundColor: color]
         let width = metrics.numberColumnWidth
         if let old = content.line.oldNumber {
             drawRightAligned(String(old), right: width - 10, attributes: attributes, metrics: metrics)

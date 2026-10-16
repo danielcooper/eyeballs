@@ -29,7 +29,7 @@ final class ComposerRowView: NSView, NSTextViewDelegate {
     /// row, and a recycled row could then undo into another composer's text.
     private let typingUndo = UndoManager()
     private let titleLabel = NSTextField(labelWithString: "")
-    private let hintLabel = NSTextField(labelWithString: "Markdown works: `code`, **bold**, lists and links.")
+    private let hintLabel = NSTextField(labelWithString: "")
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
     private let sendNowButton = NSButton(title: "Comment now", target: nil, action: nil)
     private let submitButton = NSButton(title: "Add to review", target: nil, action: nil)
@@ -75,8 +75,6 @@ final class ComposerRowView: NSView, NSTextViewDelegate {
         sendNowButton.action = #selector(sendNowPressed)
         sendNowButton.toolTip = "Send to the agent at once, without waiting for the review (⌥⌘↩)"
         submitButton.bezelStyle = .push
-        submitButton.bezelColor = .controlAccentColor
-        if #available(macOS 26.0, *) { submitButton.tintProminence = .primary }
         submitButton.target = self
         submitButton.action = #selector(submitPressed)
         submitButton.toolTip = "Add to your pending review (⌘↩)"
@@ -88,6 +86,26 @@ final class ComposerRowView: NSView, NSTextViewDelegate {
 
     required init?(coder: NSCoder) { fatalError("ComposerRowView is built in code") }
 
+    /// The one accent-filled button: "Reply now" when you answer the agent's question, else
+    /// "Add to review" or "Save".
+    private var primaryButton: NSButton {
+        content?.sendNowIsPrimary == true && !sendNowButton.isHidden ? sendNowButton : submitButton
+    }
+
+    private var secondaryButton: NSButton {
+        primaryButton === submitButton ? sendNowButton : submitButton
+    }
+
+    private static func setProminent(_ prominent: Bool, _ button: NSButton) {
+        button.bezelColor = prominent ? .controlAccentColor : nil
+        if #available(macOS 26.0, *) { button.tintProminence = prominent ? .primary : .automatic }
+    }
+
+    private static func hint(for content: ComposerRowContent) -> String {
+        guard let sendNow = content.sendNowTitle else { return "⌘↩ \(content.submitTitle)  ·  Esc closes  ·  Markdown works" }
+        return "⌘↩ \(content.submitTitle)  ·  ⌥⌘↩ \(sendNow)  ·  Esc closes  ·  Markdown works"
+    }
+
     func show(_ content: ComposerRowContent, text: String, pane: DiffPaneController) {
         if self.content?.key != content.key { typingUndo.removeAllActions() }
         self.content = content
@@ -97,6 +115,8 @@ final class ComposerRowView: NSView, NSTextViewDelegate {
         submitButton.toolTip = content.sendNowTitle == nil ? "Save the comment (⌘↩)" : "Add to your pending review (⌘↩)"
         sendNowButton.isHidden = content.sendNowTitle == nil
         sendNowButton.title = content.sendNowTitle ?? ""
+        for button in [submitButton, sendNowButton] { Self.setProminent(button === primaryButton, button) }
+        hintLabel.stringValue = Self.hint(for: content)
         textView.placeholder = content.sendNowTitle == nil ? "Edit the comment." : "Leave a comment"
         if textView.string != text { textView.string = text }
         needsLayout = true
@@ -153,7 +173,7 @@ final class ComposerRowView: NSView, NSTextViewDelegate {
         textView.frame = NSRect(x: box.minX + 12, y: textTop, width: box.width - 24, height: max(Self.minimumTextHeight, buttonsY - 12 - textTop))
 
         var right = box.maxX - 12
-        for button in [submitButton, sendNowButton, cancelButton] where !button.isHidden {
+        for button in [primaryButton, secondaryButton, cancelButton] where !button.isHidden {
             button.sizeToFit()
             let width = max(button.frame.width, 72)
             button.frame = NSRect(x: right - width, y: buttonsY, width: width, height: 26)

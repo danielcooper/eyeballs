@@ -21,7 +21,8 @@ final class DiffRowView: NSTableRowView {
     override func drawSeparator(in dirtyRect: NSRect) {}
 }
 
-/// The sticky header at the top of each file: collapse, path, counts and "Comment on file".
+/// The sticky header at the top of each file: collapse, path, counts, "Comment on file" and
+/// the Viewed box.
 @MainActor
 final class FileHeaderView: NSView {
     static let identifier = NSUserInterfaceItemIdentifier("fileHeader")
@@ -37,6 +38,7 @@ final class FileHeaderView: NSView {
     private let changeChip = ChipLabel()
     private let threadsLabel = NSTextField(labelWithString: "")
     private let commentButton = NSButton()
+    private let viewedBox = NSButton(checkboxWithTitle: "Viewed", target: nil, action: nil)
 
     override var isFlipped: Bool { true }
 
@@ -65,7 +67,13 @@ final class FileHeaderView: NSView {
         commentButton.action = #selector(commentOnFile)
         commentButton.toolTip = "Start a thread about the whole file"
 
-        for view in [chevron, icon, pathLabel, countsLabel, changeChip, threadsLabel, commentButton] as [NSView] {
+        viewedBox.controlSize = .small
+        viewedBox.font = .systemFont(ofSize: 11)
+        viewedBox.target = self
+        viewedBox.action = #selector(toggleViewed)
+        viewedBox.toolTip = "Mark this file viewed and fold it away (v)"
+
+        for view in [chevron, icon, pathLabel, countsLabel, changeChip, threadsLabel, commentButton, viewedBox] as [NSView] {
             addSubview(view)
         }
     }
@@ -88,11 +96,12 @@ final class FileHeaderView: NSView {
         pathLabel.attributedStringValue = Self.pathText(path: content.path, oldPath: content.oldPath)
         countsLabel.attributedStringValue = content.isBinary ? NSAttributedString() : Self.countsText(additions: content.additions, deletions: content.deletions)
         let chipWords = content.isBinary ? (content.change == .modified ? "Binary" : "\(style.words) · Binary") : style.wordsShownInHeader
-        changeChip.isHidden = chipWords == nil
         changeChip.show(text: chipWords ?? "", tint: style.color)
 
-        threadsLabel.isHidden = content.threadCount == 0
+        commentButton.setAccessibilityLabel("Comment on file")
         threadsLabel.stringValue = content.threadCount == 1 ? "1 thread" : "\(content.threadCount) threads"
+        viewedBox.state = content.isViewed ? .on : .off
+        viewedBox.setAccessibilityLabel("Viewed \((content.path as NSString).lastPathComponent)")
 
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
@@ -107,27 +116,56 @@ final class FileHeaderView: NSView {
         chevron.frame = NSRect(x: 8, y: midY - 10, width: 20, height: 20)
         icon.frame = NSRect(x: 30, y: midY - 8, width: 16, height: 16)
 
-        commentButton.sizeToFit()
+        fitTrailingItems()
+        viewedBox.sizeToFit()
         var right = bounds.width - 12
+        viewedBox.frame = NSRect(x: right - viewedBox.frame.width, y: midY - viewedBox.frame.height / 2,
+                                 width: viewedBox.frame.width, height: viewedBox.frame.height)
+        right = viewedBox.frame.minX - 12
         commentButton.frame = NSRect(x: right - commentButton.frame.width, y: midY - commentButton.frame.height / 2,
                                      width: commentButton.frame.width, height: commentButton.frame.height)
-        right = commentButton.frame.minX - 10
+        right = commentButton.frame.minX - 12
         if !threadsLabel.isHidden {
-            threadsLabel.sizeToFit()
             threadsLabel.frame.origin = NSPoint(x: right - threadsLabel.frame.width, y: midY - threadsLabel.frame.height / 2)
             right = threadsLabel.frame.minX - 12
         }
 
-        countsLabel.sizeToFit()
         let chipSize = changeChip.isHidden ? .zero : changeChip.fittingSize
         let trailingWidth = countsLabel.frame.width + (chipSize.width > 0 ? chipSize.width + 8 : 0)
-        let pathX: CGFloat = 52
-        let pathWidth = max(40, min(pathLabel.attributedStringValue.size().width + 4, right - pathX - trailingWidth - 10))
-        pathLabel.frame = NSRect(x: pathX, y: midY - 9, width: pathWidth, height: 18)
+        let pathWidth = max(40, min(pathLabel.attributedStringValue.size().width + 4, right - Self.pathX - trailingWidth - 10))
+        pathLabel.frame = NSRect(x: Self.pathX, y: midY - 9, width: pathWidth, height: 18)
         countsLabel.frame.origin = NSPoint(x: pathLabel.frame.maxX + 10, y: midY - countsLabel.frame.height / 2)
         if !changeChip.isHidden {
             changeChip.frame = NSRect(x: countsLabel.frame.maxX + 8, y: midY - chipSize.height / 2, width: chipSize.width, height: chipSize.height)
         }
+    }
+
+    private static let pathX: CGFloat = 52
+    private static let minimumPathWidth: CGFloat = 120
+
+    /// Makes room for the path in a narrow row: "Comment on file" drops to its icon first, then
+    /// the thread count goes, then the change chip.
+    private func fitTrailingItems() {
+        guard let content else { return }
+        countsLabel.sizeToFit()
+        threadsLabel.sizeToFit()
+        viewedBox.sizeToFit()
+        commentButton.imagePosition = .imageLeading
+        commentButton.sizeToFit()
+        threadsLabel.isHidden = content.threadCount == 0
+        changeChip.isHidden = changeChip.text.isEmpty
+        func pathRoom() -> CGFloat {
+            var used = 12 + viewedBox.frame.width + 12 + commentButton.frame.width + 12 + countsLabel.frame.width + 10
+            if !threadsLabel.isHidden { used += threadsLabel.frame.width + 12 }
+            if !changeChip.isHidden { used += changeChip.fittingSize.width + 8 }
+            return bounds.width - Self.pathX - used
+        }
+        if pathRoom() < Self.minimumPathWidth {
+            commentButton.imagePosition = .imageOnly
+            commentButton.sizeToFit()
+        }
+        if pathRoom() < Self.minimumPathWidth { threadsLabel.isHidden = true }
+        if pathRoom() < Self.minimumPathWidth { changeChip.isHidden = true }
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -148,11 +186,17 @@ final class FileHeaderView: NSView {
         pane?.openComposer(.draft(.newThread(.file(path: content.path))))
     }
 
+    @objc private func toggleViewed() {
+        guard let content else { return }
+        pane?.setViewed(!content.isViewed, path: content.path)
+    }
+
     private func accessibilitySummary(_ content: FileHeaderContent, style: FileChangeStyle) -> String {
         var parts = [content.path, style.words]
         if let oldPath = content.oldPath { parts.append("from \(oldPath)") }
         if !content.isBinary { parts.append("\(content.additions) added, \(content.deletions) deleted") }
         if content.threadCount > 0 { parts.append(threadsLabel.stringValue) }
+        if content.isViewed { parts.append("viewed") }
         if content.isCollapsed { parts.append("collapsed") }
         return parts.joined(separator: ", ")
     }
@@ -219,6 +263,8 @@ final class ChipLabel: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("ChipLabel is built in code") }
+
+    var text: String { label.stringValue }
 
     func show(text: String, tint: NSColor) {
         label.stringValue = text
@@ -333,7 +379,7 @@ final class GapRowView: NSView {
                        from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         }
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11.5, weight: .medium),
+            .font: NSFont.systemFont(ofSize: 11, weight: .medium),
             .foregroundColor: content.canExpand ? DiffColors.commentButton : NSColor.secondaryLabelColor,
         ]
         let text = content.canExpand ? "⋯  \(label(for: content)) · Show" : "⋯  \(label(for: content))"
@@ -458,17 +504,120 @@ final class BigFileRowView: NSView {
     }
 }
 
-/// Empty space under the last file, so the end of the diff can scroll up into view.
+/// A binary image shown as itself, on a checkerboard so transparency shows. A changed image
+/// shows before and after side by side, each with its size in pixels and bytes.
 @MainActor
-final class FooterRowView: NSView {
-    static let identifier = NSUserInterfaceItemIdentifier("footer")
-    static let height: CGFloat = 96
+final class ImagePreviewRowView: NSView {
+    static let identifier = NSUserInterfaceItemIdentifier("image")
+    static let maxImageHeight: CGFloat = 240
+    private static let padding: CGFloat = 12
+    private static let labelHeight: CGFloat = 16
+    private static let captionHeight: CGFloat = 16
+    private static let spacing: CGFloat = 4
+    private static let columnGap: CGFloat = 16
 
+    weak var pane: DiffPaneController?
+    private var content: ImagePreviewContent?
+    private var images: [Data: NSImage] = [:]
+
+    override var isFlipped: Bool { true }
     override var isOpaque: Bool { true }
+
+    static func height(of content: ImagePreviewContent, rowWidth: CGFloat, inset: CGFloat) -> CGFloat {
+        let imageHeight = slots(for: content, rowWidth: rowWidth, inset: inset).map(\.imageSize.height).max() ?? 0
+        let hasLabels = content.before != nil && content.after != nil
+        return padding + (hasLabels ? labelHeight + spacing : 0) + imageHeight + 2 * spacing + captionHeight + padding
+    }
+
+    func show(_ content: ImagePreviewContent, pane: DiffPaneController) {
+        self.content = content
+        self.pane = pane
+        var kept: [Data: NSImage] = [:]
+        for info in [content.before, content.after].compactMap({ $0 }) {
+            kept[info.data] = images[info.data] ?? NSImage(data: info.data)
+        }
+        images = kept
+        setAccessibilityElement(true)
+        setAccessibilityRole(.image)
+        setAccessibilityLabel(Self.slots(for: content, rowWidth: 800, inset: 0)
+            .map { "\($0.title ?? "Image"): \($0.info.caption)" }.joined(separator: ", "))
+        needsDisplay = true
+    }
+
+    private struct Slot {
+        var title: String?
+        var info: ImageInfo
+        var x: CGFloat
+        var imageSize: CGSize
+    }
+
+    /// Each image at its pixel size, shrunk to fit its half of the row and the height cap.
+    private static func slots(for content: ImagePreviewContent, rowWidth: CGFloat, inset: CGFloat) -> [Slot] {
+        let available = max(120, rowWidth - inset - 16)
+        let both = content.before != nil && content.after != nil
+        let slotWidth = both ? (available - columnGap) / 2 : available
+        var result: [Slot] = []
+        var x = inset
+        for (title, info) in [("Before", content.before), ("After", content.after)] {
+            guard let info else { continue }
+            let width = CGFloat(info.pixelWidth)
+            let height = CGFloat(info.pixelHeight)
+            let scale = min(1, slotWidth / width, maxImageHeight / height)
+            result.append(Slot(title: both ? title : nil, info: info, x: x,
+                               imageSize: CGSize(width: max(1, floor(width * scale)), height: max(1, floor(height * scale)))))
+            x += slotWidth + columnGap
+        }
+        return result
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         DiffColors.paneBackground.setFill()
         bounds.fill()
+        guard let pane, let content else { return }
+        let slots = Self.slots(for: content, rowWidth: pane.rowWidth, inset: pane.metrics.codeX)
+        let hasLabels = slots.contains { $0.title != nil }
+        let imageTop = Self.padding + (hasLabels ? Self.labelHeight + Self.spacing : 0)
+        let tallest = slots.map(\.imageSize.height).max() ?? 0
+        let labelAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.secondaryLabelColor,
+        ]
+        let captionAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor,
+        ]
+        for slot in slots {
+            if let title = slot.title {
+                (title as NSString).draw(at: NSPoint(x: slot.x, y: Self.padding), withAttributes: labelAttributes)
+            }
+            let frame = NSRect(origin: NSPoint(x: slot.x, y: imageTop), size: slot.imageSize)
+            drawCheckerboard(in: frame)
+            images[slot.info.data]?.draw(in: frame, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            DiffColors.border.setStroke()
+            let outline = NSBezierPath(rect: frame.insetBy(dx: -0.5, dy: -0.5))
+            outline.lineWidth = 1
+            outline.stroke()
+            (slot.info.caption as NSString).draw(at: NSPoint(x: slot.x, y: imageTop + tallest + 2 * Self.spacing), withAttributes: captionAttributes)
+        }
+    }
+
+    private func drawCheckerboard(in rect: NSRect) {
+        NSGraphicsContext.saveGraphicsState()
+        rect.clip()
+        DiffColors.checkerLight.setFill()
+        rect.fill()
+        DiffColors.checkerDark.setFill()
+        let square: CGFloat = 8
+        var y = rect.minY
+        var row = 0
+        while y < rect.maxY {
+            var x = rect.minX + (row.isMultiple(of: 2) ? 0 : square)
+            while x < rect.maxX {
+                NSRect(x: x, y: y, width: square, height: square).fill()
+                x += 2 * square
+            }
+            y += square
+            row += 1
+        }
+        NSGraphicsContext.restoreGraphicsState()
     }
 }
 

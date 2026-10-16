@@ -1,27 +1,40 @@
 import SwiftUI
 
-/// The right-hand column: the banner, the diff pane or its empty and loading states, and the
-/// review bar along the bottom.
+/// The right-hand column: the diff pane or its empty and loading states, news floating over it,
+/// and the review bar along the bottom.
 struct DetailColumn: View {
     let model: ReviewWindowModel
     let windowState: ReviewWindowState
 
     var body: some View {
         VStack(spacing: 0) {
-            if let banner = model.banner {
-                BannerStrip(banner: banner) { model.acceptBanner() }
-            }
-            if let message = model.errorMessage {
-                ErrorStrip(message: message) { model.errorMessage = nil }
-            }
-            ZStack {
+            ZStack(alignment: .bottom) {
                 DiffPaneView(model: model, windowState: windowState, layer: model.layer,
-                             layerItem: model.selectedLayer, stack: model.selectedStack)
+                             layerItem: model.selectedLayer, stack: model.selectedStack,
+                             viewedFiles: windowState.viewedFiles[model.selection?.layerID ?? -1] ?? [:])
                 overlay
+                notices
             }
             ReviewBar(model: model, windowState: windowState)
         }
         .background(Color.paneBackground)
+    }
+
+    /// News such as a newer revision floats over the bottom of the pane, so the code you are
+    /// reading never moves when it arrives.
+    private var notices: some View {
+        VStack(spacing: 8) {
+            if let banner = model.banner {
+                FloatingNotice(message: banner.message, symbol: "arrow.triangle.2.circlepath.circle.fill", tint: .blue,
+                               actionTitle: banner.actionTitle, isProminent: true) { model.acceptBanner() }
+            }
+            if let message = model.errorMessage {
+                FloatingNotice(message: message, symbol: "exclamationmark.triangle.fill", tint: .orange,
+                               actionTitle: "Dismiss", isProminent: false) { model.errorMessage = nil }
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 16)
     }
 
     @ViewBuilder
@@ -56,7 +69,7 @@ struct DetailColumn: View {
                     ProgressView().controlSize(.small)
                     Text("Loading layer…").font(.callout)
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(.regularMaterial, in: Capsule())
                 .padding(.top, 16)
@@ -78,50 +91,87 @@ struct DetailColumn: View {
     }
 }
 
-/// A strip under the toolbar, for news such as a newer revision, with its action button.
-struct BannerStrip: View {
-    let banner: Banner
+/// A capsule of news over the pane, such as a newer revision or an error, with one button.
+struct FloatingNotice: View {
+    let message: String
+    let symbol: String
+    let tint: Color
+    let actionTitle: String
+    let isProminent: Bool
     let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                .font(.system(size: 15))
-                .foregroundStyle(.blue)
-            Text(banner.message)
-                .font(.system(size: 12.5))
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.body)
+                .foregroundStyle(tint)
+            Text(message)
+                .font(.callout)
                 .lineLimit(2)
-            Spacer(minLength: 12)
-            Button(banner.actionTitle, action: action)
-                .buttonStyle(.borderedProminent)
+                .fixedSize(horizontal: false, vertical: true)
+            actionButton
                 .controlSize(.small)
+                .fixedSize()
         }
-        .padding(.horizontal, 16)
+        .padding(.leading, 12)
+        .padding(.trailing, 8)
         .padding(.vertical, 8)
-        .background(Color.blue.opacity(0.09), ignoresSafeAreaEdges: [])
-        .overlay(alignment: .bottom) { Divider() }
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(tint.opacity(0.35)))
+        .shadow(color: .black.opacity(0.16), radius: 12, y: 4)
+        .frame(maxWidth: 560)
         .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var actionButton: some View {
+        if isProminent {
+            Button(actionTitle, action: action).buttonStyle(.borderedProminent)
+        } else {
+            Button(actionTitle, action: action)
+        }
     }
 }
 
-struct ErrorStrip: View {
-    let message: String
-    let dismiss: () -> Void
+/// The toolbar's way through the stack: the layer below, the layer above, and every layer by name.
+struct LayerNavigator: View {
+    let model: ReviewWindowModel
+    let windowState: ReviewWindowState
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            Text(message)
-                .font(.system(size: 12.5))
-                .lineLimit(3)
-            Spacer(minLength: 12)
-            Button("Dismiss", action: dismiss)
-                .controlSize(.small)
+        if let stack = model.selectedStack, let layer = model.selectedLayer {
+            ControlGroup {
+                Button {
+                    windowState.selectAdjacentLayer(-1, in: model)
+                } label: {
+                    Label("Layer below", systemImage: "chevron.left")
+                }
+                .disabled(windowState.adjacentLayer(-1, in: model) == nil)
+                .help(helpText(for: windowState.adjacentLayer(-1, in: model), direction: "below", keys: "⇧⌘["))
+                Menu {
+                    ForEach(stack.layers.sorted { $0.position > $1.position }) { item in
+                        Toggle(isOn: Binding(get: { item.id == layer.id }, set: { _ in model.selectLayer(atPosition: item.position) })) {
+                            Text("\(item.position) \(item.branch)")
+                        }
+                    }
+                } label: {
+                    Text("Layer \(layer.position) of \(stack.layers.count): \(layer.branch)")
+                }
+                .help("Go to another layer of \(stack.name)")
+                Button {
+                    windowState.selectAdjacentLayer(1, in: model)
+                } label: {
+                    Label("Layer above", systemImage: "chevron.right")
+                }
+                .disabled(windowState.adjacentLayer(1, in: model) == nil)
+                .help(helpText(for: windowState.adjacentLayer(1, in: model), direction: "above", keys: "⇧⌘]"))
+            }
+            .fixedSize()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(Color.orange.opacity(0.10), ignoresSafeAreaEdges: [])
-        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private func helpText(for layer: LayerItem?, direction: String, keys: String) -> String {
+        guard let layer else { return "There is no layer \(direction) this one" }
+        return "Go to layer \(layer.position), \(layer.branch) (\(keys))"
     }
 }

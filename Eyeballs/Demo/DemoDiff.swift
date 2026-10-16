@@ -1,5 +1,5 @@
 #if DEBUG
-import Foundation
+import AppKit
 
 /// Builds a `FileItem` from a file's old and new text, with three lines of context per hunk,
 /// so the demo's line numbers, hunks and full texts always agree.
@@ -15,8 +15,9 @@ enum DemoDiff {
                         isBinary: false, hunks: hunks, newLines: newLines, oldLines: oldLines)
     }
 
-    static func binary(path: String, change: FileChange) -> FileItem {
-        FileItem(path: path, oldPath: nil, change: change, additions: 0, deletions: 0, isBinary: true, hunks: [], newLines: [], oldLines: [])
+    static func binary(path: String, change: FileChange, old: Data? = nil, new: Data? = nil) -> FileItem {
+        FileItem(path: path, oldPath: nil, change: change, additions: 0, deletions: 0, isBinary: true, hunks: [], newLines: [], oldLines: [],
+                 newImage: new, oldImage: old)
     }
 
     static func lines(of text: String) -> [String] {
@@ -34,6 +35,43 @@ enum DemoDiff {
             preconditionFailure("Demo content has no line containing the expected snippet")
         }
         return index + 1
+    }
+
+    /// A PNG drawn in code, so the demo can show image previews without shipping images.
+    @MainActor
+    static func png(width: Int, height: Int, draw: (NSRect) -> Void) -> Data? {
+        guard let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4,
+            hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+            let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        draw(NSRect(x: 0, y: 0, width: width, height: height))
+        NSGraphicsContext.restoreGraphicsState()
+        return bitmap.representation(using: .png, properties: [:])
+    }
+
+    @MainActor
+    static func heroImage() -> Data? {
+        png(width: 960, height: 400) { rect in
+            NSGradient(starting: NSColor(srgbRed: 0.98, green: 0.62, blue: 0.36, alpha: 1),
+                       ending: NSColor(srgbRed: 0.84, green: 0.27, blue: 0.42, alpha: 1))?.draw(in: rect, angle: -20)
+            NSColor.white.withAlphaComponent(0.92).setFill()
+            NSBezierPath(roundedRect: NSRect(x: 80, y: 120, width: 420, height: 160), xRadius: 24, yRadius: 24).fill()
+            let title: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 56, weight: .bold),
+                                                        .foregroundColor: NSColor(srgbRed: 0.84, green: 0.27, blue: 0.42, alpha: 1)]
+            ("Checkout" as NSString).draw(at: NSPoint(x: 120, y: 166), withAttributes: title)
+        }
+    }
+
+    @MainActor
+    static func logoImage(fill: NSColor) -> Data? {
+        png(width: 128, height: 128) { rect in
+            fill.setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 12, dy: 12)).fill()
+            NSColor.white.setFill()
+            NSBezierPath(roundedRect: NSRect(x: 44, y: 44, width: 40, height: 40), xRadius: 8, yRadius: 8).fill()
+        }
     }
 
     private enum Step {

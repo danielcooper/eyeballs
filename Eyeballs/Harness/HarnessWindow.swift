@@ -11,6 +11,7 @@ final class HarnessWindow: NSWindow {
     static let size = NSSize(width: 1440, height: 900)
 
     private var harnessModel: ReviewWindowModel?
+    private var harnessWindowState: ReviewWindowState?
     private var sidebarWindow: NSWindow?
 
     static func make(model: ReviewWindowModel, windowState: ReviewWindowState) -> HarnessWindow {
@@ -24,6 +25,7 @@ final class HarnessWindow: NSWindow {
         window.toolbarStyle = .unified
         window.contentViewController = host
         window.harnessModel = model
+        window.harnessWindowState = windowState
         window.setFrame(NSRect(origin: NSPoint(x: -30_000, y: -30_000), size: size), display: false)
         window.orderFrontRegardless()
         return window
@@ -128,7 +130,7 @@ final class HarnessWindow: NSWindow {
         let window = sidebarWindow ?? {
             let window = SidebarHarnessWindow(contentRect: NSRect(origin: NSPoint(x: -40_000, y: -40_000), size: size), styleMask: [.borderless], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: HarnessSidebar(model: model))
+            window.contentView = NSHostingView(rootView: HarnessSidebar(model: model, windowState: harnessWindowState ?? ReviewWindowState()))
             window.orderFrontRegardless()
             sidebarWindow = window
             return window
@@ -173,10 +175,11 @@ final class HarnessWindow: NSWindow {
 /// glass behind it comes out washed out, so plain text colours stand in for it here.
 private struct HarnessSidebar: View {
     let model: ReviewWindowModel
+    let windowState: ReviewWindowState
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        SidebarView(model: model)
+        SidebarView(model: model, windowState: windowState)
             .scrollContentBackground(.hidden)
             .foregroundStyle(colorScheme == .dark ? Color.white : Color.black)
             .padding(.top, 44)

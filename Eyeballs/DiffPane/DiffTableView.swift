@@ -13,12 +13,26 @@ final class DiffTableView: NSTableView {
 
     override func keyDown(with event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if window?.firstResponder === self, let pane, flags.isDisjoint(with: [.command, .control, .option]),
+           let step = Self.lineStep(forKeyCode: event.keyCode) {
+            pane.moveLineCursor(by: step, extending: flags.contains(.shift))
+            return
+        }
         guard window?.firstResponder === self, let pane,
               flags.isDisjoint(with: [.command, .control, .option]),
               let characters = event.characters, characters.count == 1, let character = characters.first,
               pane.handleShortcut(character) else {
             super.keyDown(with: event)
             return
+        }
+    }
+
+    /// ↓ and ↑ move the line cursor, as `j` and `k` do.
+    private static func lineStep(forKeyCode keyCode: UInt16) -> Int? {
+        switch keyCode {
+        case 125: 1
+        case 126: -1
+        default: nil
         }
     }
 

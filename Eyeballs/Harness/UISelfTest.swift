@@ -55,6 +55,13 @@ final class UISelfTest {
         await checkShortcutsNeedTableFocus()
         await checkReviewLoop()
         await checkCancelCanBeUndone()
+        checkSmallGapsShowInline()
+        await checkThreadJumpShowsItsCode()
+        await checkDeletingPendingCanBeUndone()
+        await checkArrowKeysMoveTheLineCursor()
+        await checkViewedFoldsTheFile()
+        await checkNeedsYouCrossesLayers()
+        await checkFinishReviewNeverSendsByItself()
     }
 
     // MARK: Checks
@@ -71,7 +78,7 @@ final class UISelfTest {
                 pane.loadBigFile(file.path)
                 for index in 0...file.hunks.count { pane.expandGap(GapID(path: file.path, index: index)) }
             }
-            for file in layer.files where file.change == .modified || file.change == .renamed {
+            for file in layer.files where !file.isBinary && (file.change == .modified || file.change == .renamed) {
                 let numbers = pane.rows.compactMap { row -> Int? in
                     guard let code = row.code, code.path == file.path, code.line.kind != .deleted else { return nil }
                     return code.line.newNumber
@@ -139,7 +146,11 @@ final class UISelfTest {
         if !has("Layer 1", "1", .command) || !has("Layer 9", "9", .command) { missing.append("⌘1 to ⌘9") }
         if !has("Layer Above", "]", [.command, .shift]) && !has("Layer Above", "}", .command) { missing.append("⇧⌘]") }
         if !has("Layer Below", "[", [.command, .shift]) && !has("Layer Below", "{", .command) { missing.append("⇧⌘[") }
-        if !has("Submit Review", "\r", [.command, .shift]) { missing.append("⇧⌘↩") }
+        if !has("Finish Review", "\r", [.command, .shift]) { missing.append("⇧⌘↩") }
+        if !has("Next File", "]", .command) || !has("Previous File", "[", .command) { missing.append("⌘] and ⌘[") }
+        if !has("Next Thread", "]", [.command, .option]) || !has("Previous Thread", "[", [.command, .option]) { missing.append("⌥⌘] and ⌥⌘[") }
+        if !has("Next Thread That Needs You", "a", [.command, .shift]) { missing.append("⇧⌘A") }
+        if !has("Keyboard Shortcuts", "/", .command) { missing.append("⌘/") }
 
         model.selectLayer(atPosition: 1)
         await window.settle()
@@ -371,8 +382,7 @@ final class UISelfTest {
         await window.settle()
         let discarded = model.draft(for: .newThread(.lines(range))).isEmpty && pane.indexByID[.composer(key)] == nil
         window.makeFirstResponder(table)
-        // AppKit closes the undo group when a real event ends; events sent straight to the window never end one.
-        while let undo = window.undoManager, undo.groupingLevel > 0 { undo.endUndoGrouping() }
+        // Ending the group by hand would leave the undo manager unable to open the next one.
         let canUndo = window.undoManager?.canUndo == true
         if canUndo { window.undoManager?.undo() }
         await window.settle()
@@ -383,6 +393,161 @@ final class UISelfTest {
         record("cancel_can_be_undone", ["discarded": discarded, "restored_by_undo": restored, "esc_keeps_draft": keptAfterEscape,
                                         "pass": discarded && restored && keptAfterEscape])
         model.saveDraft("", for: .newThread(.lines(range)))
+    }
+
+    // MARK: Checks from the design review
+
+    /// Runs of three unchanged lines or fewer show in place, never behind a "Show" row.
+    private func checkSmallGapsShowInline() {
+        var problems: [String] = []
+        for layer in (model.selectedStack?.layers ?? []).sorted(by: { $0.position < $1.position }) {
+            model.selectLayer(atPosition: layer.position)
+            guard let content = model.layer else { continue }
+            let rows = DiffRowBuilder(prepared: PreparedLayer(files: content.files), layer: content, layerItem: layer,
+                                      stack: model.selectedStack, state: LayerViewState(), codeColumnInset: 100).build()
+            for row in rows {
+                if case .gap(let gap) = row, gap.canExpand, gap.hiddenCount <= DiffRowBuilder.inlineGapLimit {
+                    problems.append("\(gap.path) hides \(gap.hiddenCount) lines")
+                }
+            }
+        }
+        record("small_gaps_show_inline", ["problems": problems, "pass": problems.isEmpty])
+    }
+
+    /// Jumping to t42, whose range starts inside a folded gap, still shows its code above the
+    /// card, and focusing it tints those lines.
+    private func checkThreadJumpShowsItsCode() async {
+        model.selectLayer(atPosition: 2)
+        await window.settle(400)
+        session.windowState.revealThread(42)
+        await window.settle()
+        guard let threadRow = pane.indexByID[.thread(42)],
+              case .lines(let range) = model.layer?.threads.first(where: { $0.id == 42 })?.anchor,
+              let codeRow = pane.firstCodeRow(of: range, above: threadRow) else {
+            return record("thread_jump_shows_its_code", ["pass": false, "reason": "t42 or its code is not shown"])
+        }
+        let visible = pane.visibleRect
+        let codeTop = table.rect(ofRow: codeRow).minY
+        let codeIsVisible = codeTop >= visible.minY + pane.stickyHeaderHeight(above: codeRow) - 0.5 && codeTop < visible.maxY
+        let tinted = pane.isLineSelected(pane.rows[codeRow].id)
+        record("thread_jump_shows_its_code", ["code_row_visible": codeIsVisible, "lines_tinted": tinted,
+                                              "pass": codeIsVisible && tinted && pane.focusedThreadID == 42])
+        pane.clearSelections()
+    }
+
+    /// Deleting a pending comment needs no confirmation, and Edit > Undo brings it back.
+    private func checkDeletingPendingCanBeUndone() async {
+        model.selectLayer(atPosition: 2)
+        await window.settle(400)
+        guard let range = lineRange(path: "Sources/API/Client.swift", containing: "request.httpMethod = method") else {
+            return record("delete_pending_can_be_undone", ["pass": false, "reason": "no line to comment on"])
+        }
+        let body = "Throwaway comment for the undo check."
+        print("TRACE add"); fflush(stdout)
+        model.addComment(body, at: .lines(range), sendNow: false)
+        await window.settle()
+        print("TRACE added"); fflush(stdout)
+        guard let draft = model.layer?.threads.first(where: { $0.comments.first?.body == body }) else {
+            return record("delete_pending_can_be_undone", ["pass": false, "reason": "the draft was not added"])
+        }
+        let pendingBefore = model.review.pendingCommentCount
+        print("TRACE before delete"); fflush(stdout)
+        pane.deleteThread(draft.id)
+        await window.settle()
+        let deleted = model.layer?.threads.contains { $0.id == draft.id } == false && model.review.pendingCommentCount == pendingBefore - 1
+        window.makeFirstResponder(table)
+        let actionName = window.undoManager?.undoActionName ?? ""
+        print("TRACE before undo"); fflush(stdout)
+        window.undoManager?.undo()
+        print("TRACE after undo"); fflush(stdout)
+        await window.settle()
+        print("TRACE settled"); fflush(stdout)
+        let restored = model.layer?.threads.first { $0.comments.first?.body == body && $0.anchor == draft.anchor }
+        let draftCannotResolve: Bool
+        if let restored {
+            pane.setFocusedThread(restored.id)
+            window.makeFirstResponder(table)
+            type("e")
+            await window.settle()
+            draftCannotResolve = model.layer?.threads.first { $0.id == restored.id }?.isResolved == false
+        } else {
+            draftCannotResolve = false
+        }
+        record("delete_pending_can_be_undone", [
+            "deleted_at_once": deleted, "undo_action": actionName, "restored_by_undo": restored?.state == .draft,
+            "pending_count_restored": model.review.pendingCommentCount == pendingBefore, "e_leaves_a_draft_open": draftCannotResolve,
+            "pass": deleted && actionName == "Delete Comment" && restored?.state == .draft
+                && model.review.pendingCommentCount == pendingBefore && draftCannotResolve,
+        ])
+        pane.clearSelections()
+    }
+
+    /// ↓ and ↑ move the line cursor, as j and k do.
+    private func checkArrowKeysMoveTheLineCursor() async {
+        pane.clearSelections()
+        window.makeFirstResponder(table)
+        press(keyCode: 125, characters: String(UnicodeScalar(NSDownArrowFunctionKey)!), modifiers: [.numericPad, .function])
+        let first = pane.lineSelection?.headLine
+        press(keyCode: 125, characters: String(UnicodeScalar(NSDownArrowFunctionKey)!), modifiers: [.numericPad, .function])
+        let second = pane.lineSelection
+        press(keyCode: 126, characters: String(UnicodeScalar(NSUpArrowFunctionKey)!), modifiers: [.numericPad, .function])
+        let back = pane.lineSelection?.headLine
+        await window.settle()
+        let moved = first != nil && second != nil && (second?.headLine != first || second?.path != pane.lineSelection?.path)
+        record("arrow_keys_move_the_line_cursor", ["first": first ?? -1, "second": second?.headLine ?? -1, "back": back ?? -1,
+                                                   "pass": moved && back == first])
+        pane.clearSelections()
+    }
+
+    /// Ticking Viewed folds the file and counts it; clearing it unfolds the file again.
+    private func checkViewedFoldsTheFile() async {
+        guard let layer = model.layer, let file = layer.files.first(where: { !$0.isBinary }) else {
+            return record("viewed_folds_the_file", ["pass": false, "reason": "no file to view"])
+        }
+        pane.setViewed(true, path: file.path)
+        await window.settle()
+        let header = pane.indexByID[.fileHeader(file.path)].flatMap { index -> FileHeaderContent? in
+            if case .fileHeader(let content) = pane.rows[index] { content } else { nil }
+        }
+        let folded = header?.isViewed == true && header?.isCollapsed == true && session.windowState.viewedCount(in: layer) == 1
+        pane.setViewed(false, path: file.path)
+        await window.settle()
+        let unfolded = pane.rows.contains { $0.code?.path == file.path } && session.windowState.viewedCount(in: layer) == 0
+        record("viewed_folds_the_file", ["folded_and_counted": folded, "unfolded_again": unfolded, "pass": folded && unfolded])
+    }
+
+    /// Past the last thread that needs you on a layer, `a` moves on to the next layer that has one.
+    private func checkNeedsYouCrossesLayers() async {
+        model.selectLayer(atPosition: 1)
+        await window.settle(400)
+        let lastNeedingYou = pane.rows.last { $0.thread?.state.needsYou == true }?.threadID
+        guard let lastNeedingYou else {
+            return record("needs_you_crosses_layers", ["pass": false, "reason": "layer 1 has no thread that needs you"])
+        }
+        pane.setFocusedThread(lastNeedingYou)
+        window.makeFirstResponder(table)
+        type("a")
+        await window.settle(450)
+        let position = model.selectedLayer?.position ?? 0
+        let focused = pane.focusedThreadID.flatMap { id in model.layer?.threads.first { $0.id == id } }
+        record("needs_you_crosses_layers", ["layer_after_a": position, "focused_thread": focused?.id ?? -1,
+                                            "pass": position != 1 && focused?.state.needsYou == true])
+    }
+
+    /// ⇧⌘↩ opens Finish review and sends nothing; only Submit sends.
+    private func checkFinishReviewNeverSendsByItself() async {
+        let reviewBefore = model.review.lastSubmitted?.number
+        if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command, .shift], timestamp: ProcessInfo.processInfo.systemUptime,
+                                        windowNumber: window.windowNumber, context: nil, characters: "\r", charactersIgnoringModifiers: "\r",
+                                        isARepeat: false, keyCode: 36) {
+            _ = NSApp.mainMenu?.performKeyEquivalent(with: event)
+        }
+        await window.settle(400)
+        let opened = session.windowState.isFinishingReview
+        let sent = model.review.lastSubmitted?.number != reviewBefore
+        session.windowState.isFinishingReview = false
+        await window.settle()
+        record("finish_review_never_sends_by_itself", ["popover_opened": opened, "sent": sent, "pass": opened && !sent])
     }
 
     private func press(keyCode: UInt16, characters: String, modifiers: NSEvent.ModifierFlags) {

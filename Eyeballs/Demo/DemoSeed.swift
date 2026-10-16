@@ -53,7 +53,9 @@ extension DemoState {
                 DemoDiff.file(path: "Web/Checkout.tsx", old: source.checkoutOld, new: source.checkoutNew),
                 DemoDiff.file(path: "Web/components/Spinner.tsx", old: nil, new: source.spinner),
                 DemoDiff.file(path: "Web/hooks/useCart.ts", oldPath: "Web/hooks/useBasket.ts", old: source.useBasket, new: source.useCart),
-                DemoDiff.binary(path: "Web/assets/checkout-hero.png", change: .added),
+                DemoDiff.binary(path: "Web/assets/checkout-hero.png", change: .added, new: DemoDiff.heroImage()),
+                DemoDiff.binary(path: "Web/assets/logo.png", change: .modified,
+                                old: DemoDiff.logoImage(fill: .systemBlue), new: DemoDiff.logoImage(fill: .systemOrange)),
                 DemoDiff.file(path: "scripts/seed_orders.py", old: nil, new: source.seedOrders),
                 DemoDiff.file(path: "scripts/dev.sh", old: source.devScriptOld, new: source.devScriptNew),
             ])

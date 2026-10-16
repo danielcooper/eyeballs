@@ -4,6 +4,7 @@ import SwiftUI
 /// `gh stack view` shows them.
 struct SidebarView: View {
     let model: ReviewWindowModel
+    let windowState: ReviewWindowState
 
     var body: some View {
         List(selection: selection) {
@@ -15,7 +16,9 @@ struct SidebarView: View {
                             .selectionDisabled()
                     }
                     ForEach(repository.stacks) { stack in
-                        StackSection(stack: stack)
+                        StackSection(stack: stack, agentName: model.agent.agentName) { layer in
+                            windowState.askToRestack(layer, in: model)
+                        }
                     }
                 } header: {
                     Label(repository.name, systemImage: "folder")
@@ -38,80 +41,137 @@ struct SidebarView: View {
 
 private struct StackSection: View {
     let stack: StackItem
+    let agentName: String?
+    let askToRestack: (LayerItem) -> Void
     @State private var isExpanded = true
+
+    /// The badge is the sum of the layer rows' "need you" counts, so the two always agree.
+    private var needsYou: Int { stack.layers.reduce(0) { $0 + $1.needsYouCount } }
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             ForEach(stack.layers.sorted { $0.position > $1.position }) { layer in
-                LayerRow(layer: layer)
-                    .tag(LayerSelection(stackID: stack.id, layerID: layer.id))
+                LayerRow(layer: layer, parentBranch: parentBranch(of: layer), agentName: agentName) {
+                    askToRestack(layer)
+                }
+                .tag(LayerSelection(stackID: stack.id, layerID: layer.id))
             }
             TrunkRow(trunk: stack.trunk)
                 .selectionDisabled()
         } label: {
             Label {
                 Text(stack.name)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.body.weight(.semibold))
                     .lineLimit(1)
             } icon: {
                 Image(systemName: "square.stack.3d.up")
             }
-            .badge(stack.needsYouCount)
-            .accessibilityValue(stack.needsYouCount == 1 ? "1 thread needs you" : "\(stack.needsYouCount) threads need you")
-            .help(stack.needsYouCount == 0 ? "Nothing needs you in this stack" : "Threads that need you: \(stack.needsYouCount)")
+            .badge(needsYou)
+            .accessibilityValue(needsYou == 1 ? "1 thread needs you" : "\(needsYou) threads need you")
+            .help(needsYou == 0 ? "Nothing needs you in this stack" : "Threads that need you: \(needsYou)")
         }
+    }
+
+    private func parentBranch(of layer: LayerItem) -> String {
+        stack.layers.first { $0.position == layer.position - 1 }?.branch ?? stack.trunk
     }
 }
 
 struct LayerRow: View {
     let layer: LayerItem
+    var parentBranch = "main"
+    var agentName: String?
+    var askToRestack: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            PositionBadge(position: layer.position)
+            VStack(spacing: 0) {
+                PositionBadge(position: layer.position)
+                StackLine()
+                    .padding(.bottom, -StackLine.overlap)
+            }
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
                     Text(layer.branch)
-                        .font(.system(size: 12.5, design: .monospaced))
+                        .font(.body.monospaced())
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 4)
-                    LayerStatusChip(status: layer.status)
+                    statusChip
                 }
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     if let number = layer.prNumber {
                         Text("#\(number)")
                     }
-                    HStack(spacing: 3) {
-                        Text("+\(layer.additions)").foregroundStyle(Color.diffAddedText)
-                        Text("−\(layer.deletions)").foregroundStyle(Color.diffDeletedText)
-                    }
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    if layer.openThreadCount > 0 {
-                        HStack(spacing: 2) {
-                            Image(systemName: "bubble.left")
-                            Text("\(layer.openThreadCount)")
+                    if layer.additions > 0 || layer.deletions > 0 {
+                        HStack(spacing: 4) {
+                            Text("+\(layer.additions)").foregroundStyle(Color.diffAddedText)
+                            Text("−\(layer.deletions)").foregroundStyle(Color.diffDeletedText)
                         }
+                        .font(.caption.weight(.medium).monospaced())
+                    }
+                    if layer.needsYouCount > 0 {
+                        Text(Self.needsYouText(layer.needsYouCount))
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Color.orange)
                     }
                 }
-                .font(.system(size: 10.5))
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .fixedSize()
             }
+            .padding(.bottom, 4)
         }
-        .padding(.vertical, 2)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
+        .accessibilityAction(named: "Ask \(agentName ?? "the agent") to restack") { askToRestack() }
+    }
+
+    /// "Needs restack" says what to do: hover for why, click to ask the agent to restack.
+    @ViewBuilder
+    private var statusChip: some View {
+        if layer.status == .needsRestack {
+            Menu {
+                Button("Ask \(agentName ?? "the Agent") to Restack", action: askToRestack)
+            } label: {
+                LayerStatusChip(status: layer.status)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("This layer no longer sits on top of \(parentBranch). Click to ask \(agentName ?? "the agent") to restack it.")
+        } else {
+            LayerStatusChip(status: layer.status)
+        }
+    }
+
+    static func needsYouText(_ count: Int) -> String {
+        count == 1 ? "1 needs you" : "\(count) need you"
     }
 
     private var accessibilityText: String {
         var parts = ["Layer \(layer.position)", layer.branch]
         if let number = layer.prNumber { parts.append("pull request \(number)") }
         parts.append("\(layer.additions) added, \(layer.deletions) deleted")
-        parts.append(layer.openThreadCount == 1 ? "1 open thread" : "\(layer.openThreadCount) open threads")
+        if layer.needsYouCount > 0 { parts.append(layer.needsYouCount == 1 ? "1 thread needs you" : "\(layer.needsYouCount) threads need you") }
         if let label = layer.status.label { parts.append(label) }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// The thin line that joins each layer's badge to the one below, down to the trunk.
+private struct StackLine: View {
+    /// How far the line reaches past its row, across the list's gap to the next row.
+    static let overlap: CGFloat = 8
+
+    var body: some View {
+        Rectangle()
+            .fill(Color.secondary.opacity(0.35))
+            .frame(width: 2)
+            .frame(maxHeight: .infinity)
+            .accessibilityHidden(true)
     }
 }
 
@@ -120,9 +180,11 @@ private struct PositionBadge: View {
 
     var body: some View {
         Text("\(position)")
-            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .font(.caption.weight(.bold))
+            .monospacedDigit()
             .foregroundStyle(.secondary)
-            .frame(width: 18, height: 18)
+            .frame(width: 20, height: 20)
+            .background(Circle().fill(Color(nsColor: .controlBackgroundColor)))
             .background(Circle().fill(Color.secondary.opacity(0.14)))
             .overlay(Circle().strokeBorder(Color.secondary.opacity(0.35), lineWidth: 1))
     }
@@ -134,11 +196,11 @@ private struct TrunkRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "arrow.triangle.branch")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.tertiary)
-                .frame(width: 18, height: 18)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 20, height: 20)
             Text(trunk)
-                .font(.system(size: 12.5, design: .monospaced))
+                .font(.body.monospaced())
                 .foregroundStyle(.secondary)
         }
         .accessibilityLabel("Trunk branch \(trunk)")

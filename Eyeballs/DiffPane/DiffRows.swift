@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 
 /// One row of the diff table. Each case carries everything its row view draws, so two rows
 /// that compare equal look the same.
@@ -9,10 +10,11 @@ enum DiffRow: Equatable {
     case gap(GapContent)
     case code(CodeRowContent)
     case notice(NoticeContent)
+    case image(ImagePreviewContent)
     case bigFile(BigFileContent)
     case thread(ThreadRowContent)
     case composer(ComposerRowContent)
-    case footer
+    case footer(FooterContent)
 
     var id: RowID {
         switch self {
@@ -22,6 +24,7 @@ enum DiffRow: Equatable {
         case .gap(let gap): .gap(gap.path, gap.index)
         case .code(let code): .line(code.path, code.line.oldNumber, code.line.newNumber)
         case .notice(let notice): .notice(notice.path)
+        case .image(let image): .image(image.path)
         case .bigFile(let file): .bigFile(file.path)
         case .thread(let thread): .thread(thread.thread.id)
         case .composer(let composer): .composer(composer.key)
@@ -37,8 +40,10 @@ enum DiffRow: Equatable {
         if case .code(let code) = self { code } else { nil }
     }
 
-    var threadID: Int? {
-        if case .thread(let thread) = self { thread.thread.id } else { nil }
+    var threadID: Int? { thread?.id }
+
+    var thread: ThreadItem? {
+        if case .thread(let thread) = self { thread.thread } else { nil }
     }
 }
 
@@ -50,6 +55,7 @@ enum RowID: Hashable {
     case gap(String, Int)
     case line(String, Int?, Int?)
     case notice(String)
+    case image(String)
     case bigFile(String)
     case thread(Int)
     case composer(ComposerKey)
@@ -66,6 +72,8 @@ struct OverviewContent: Equatable {
     var layer: LayerItem?
     var layerCount: Int
     var parentBranch: String?
+    /// The layer below, which this one builds on. Nil when it builds on the trunk.
+    var parentLayer: LayerItem?
     var commits: [CommitItem]
     var fileCount: Int
     var additions: Int
@@ -82,6 +90,7 @@ struct FileHeaderContent: Equatable {
     var isBinary: Bool
     var threadCount: Int
     var isCollapsed: Bool
+    var isViewed: Bool
 }
 
 struct HunkHeaderContent: Equatable {
@@ -118,6 +127,44 @@ struct NoticeContent: Equatable {
     var symbol: String
 }
 
+/// A binary image, shown as itself: one picture for an added or deleted file, before and after
+/// for a changed one.
+struct ImagePreviewContent: Equatable {
+    var path: String
+    var before: ImageInfo?
+    var after: ImageInfo?
+}
+
+struct ImageInfo: Equatable {
+    var data: Data
+    var pixelWidth: Int
+    var pixelHeight: Int
+
+    /// Reads an image's size without drawing it. Nil when the bytes are not an image.
+    init?(data: Data) {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int, width > 0, height > 0 else { return nil }
+        self.data = data
+        pixelWidth = width
+        pixelHeight = height
+    }
+
+    var caption: String {
+        "\(pixelWidth) × \(pixelHeight) px · \(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file))"
+    }
+}
+
+/// The end of the layer, and the way on to the next one.
+struct FooterContent: Equatable {
+    var branch: String
+    /// The layer above, which you read next. Nil at the top of the stack.
+    var nextLayer: LayerItem?
+    /// The nearest other layer with threads that need you, when the next layer has none.
+    var layerNeedingYou: LayerItem?
+}
+
 struct BigFileContent: Equatable {
     var path: String
     var lineCount: Int
@@ -142,6 +189,8 @@ struct ComposerRowContent: Equatable {
     var submitTitle: String
     /// Nil for an edit, which has no "send now".
     var sendNowTitle: String?
+    /// True when sending at once is the main action, as when you answer the agent's question.
+    var sendNowIsPrimary = false
     var attachedToCard: Bool
     var leadingInset: Double
 }
@@ -194,10 +243,14 @@ struct PreparedFile {
     var hunks: [[PreparedLine]]
     var isBig: Bool
     var largestLineNumber: Int
+    var imageBefore: ImageInfo?
+    var imageAfter: ImageInfo?
 
     init(file: FileItem) {
         self.file = file
         language = CodeLanguage(path: file.path)
+        imageBefore = file.oldImage.flatMap(ImageInfo.init(data:))
+        imageAfter = file.newImage.flatMap(ImageInfo.init(data:))
         var lineCount = 0
         var byteCount = 0
         var largest = max(file.newLines.count, file.oldLines.count)
@@ -233,6 +286,12 @@ struct DiffRowBuilder {
     var state: LayerViewState
     /// Where thread cards and composers start, so they line up with the code column.
     var codeColumnInset: Double
+    var viewedPaths: Set<String> = []
+    /// The agent's name for composer titles, such as "Answer Claude's question".
+    var agentName: String?
+
+    /// Changed runs of this many unchanged lines or fewer show in place, with no gap row.
+    static let inlineGapLimit = 3
 
     func build() -> [DiffRow] {
         var rows: [DiffRow] = [.overview(overview)]
@@ -244,21 +303,33 @@ struct DiffRowBuilder {
         for file in prepared.files {
             appendFile(file, placement: placement, to: &rows)
         }
-        rows.append(.footer)
+        rows.append(.footer(footer))
         return rows
+    }
+
+    private var footer: FooterContent {
+        let position = layerItem?.position ?? 0
+        let layers = stack?.layers ?? []
+        let next = layers.first { $0.position == position + 1 }
+        var needingYou: LayerItem?
+        if (next?.needsYouCount ?? 0) == 0 {
+            needingYou = layers.filter { $0.position != position && $0.needsYouCount > 0 }
+                .min { abs($0.position - position) < abs($1.position - position) }
+        }
+        return FooterContent(branch: layerItem?.branch ?? "this layer", nextLayer: next, layerNeedingYou: needingYou)
     }
 
     private var overviewInset: Double { 16 }
 
     private var overview: OverviewContent {
         let position = layerItem?.position ?? 0
-        let parent = stack.flatMap { stack in
-            position <= 1 ? stack.trunk : stack.layers.first { $0.position == position - 1 }?.branch
-        }
+        let parentLayer = stack?.layers.first { $0.position == position - 1 }
+        let parent = position <= 1 ? stack?.trunk : parentLayer?.branch
         return OverviewContent(
             layer: layerItem,
             layerCount: stack?.layers.count ?? 0,
             parentBranch: parent,
+            parentLayer: position <= 1 ? nil : parentLayer,
             commits: layer.commits,
             fileCount: layer.files.count,
             additions: layer.files.reduce(0) { $0 + $1.additions },
@@ -272,7 +343,8 @@ struct DiffRowBuilder {
         rows.append(.fileHeader(FileHeaderContent(
             path: file.path, oldPath: file.oldPath, change: file.change,
             additions: file.additions, deletions: file.deletions, isBinary: file.isBinary,
-            threadCount: placement.threadCount(inFile: file.path), isCollapsed: isCollapsed)))
+            threadCount: placement.threadCount(inFile: file.path), isCollapsed: isCollapsed,
+            isViewed: viewedPaths.contains(file.path))))
         guard !isCollapsed else { return }
 
         let showsLines = !file.isBinary && !(prepared.isBig && !state.loadedBigFiles.contains(file.path))
@@ -301,7 +373,11 @@ struct DiffRowBuilder {
         appendNewThreadComposer(for: .file(path: file.path), inset: codeColumnInset, to: &rows)
 
         if file.isBinary {
-            rows.append(.notice(NoticeContent(path: file.path, text: "Binary file not shown", symbol: "photo")))
+            if prepared.imageBefore != nil || prepared.imageAfter != nil {
+                rows.append(.image(ImagePreviewContent(path: file.path, before: prepared.imageBefore, after: prepared.imageAfter)))
+            } else {
+                rows.append(.notice(NoticeContent(path: file.path, text: "Binary file not shown", symbol: "doc.zipper")))
+            }
             return
         }
         if prepared.isBig, !state.loadedBigFiles.contains(file.path) {
@@ -345,15 +421,14 @@ struct DiffRowBuilder {
             let firstOld = hunk.oldCount == 0 ? hunk.oldStart + 1 : hunk.oldStart
             let firstNew = hunk.newCount == 0 ? hunk.newStart + 1 : hunk.newStart
             let hidden = max(0, min(firstOld - nextOld, firstNew - nextNew))
-            let gapIsOpen = state.expandedGaps.contains(GapID(path: file.path, index: index))
-            if hidden > 0 {
-                if gapIsOpen, canExpand {
-                    rows += contextRows(for: prepared, oldStart: nextOld, newStart: nextNew, count: hidden)
-                } else {
+            let showsGapLines = canExpand && hidden > 0
+                && (hidden <= Self.inlineGapLimit || state.expandedGaps.contains(GapID(path: file.path, index: index)))
+            if showsGapLines {
+                rows += contextRows(for: prepared, oldStart: nextOld, newStart: nextNew, count: hidden)
+            } else {
+                if hidden > 0 {
                     rows.append(.gap(GapContent(path: file.path, index: index, hiddenCount: hidden, canExpand: canExpand)))
                 }
-            }
-            if !(gapIsOpen && hidden > 0) {
                 rows.append(.hunkHeader(HunkHeaderContent(path: file.path, index: index, text: hunk.header)))
             }
             for line in prepared.hunks[index] {
@@ -370,7 +445,7 @@ struct DiffRowBuilder {
         let trailing = lastLine - lastNext + 1
         if canExpand, trailing > 0, file.change != .deleted, file.change != .added {
             let index = file.hunks.count
-            if state.expandedGaps.contains(GapID(path: file.path, index: index)) {
+            if trailing <= Self.inlineGapLimit || state.expandedGaps.contains(GapID(path: file.path, index: index)) {
                 rows += contextRows(for: prepared, oldStart: nextOld, newStart: nextNew, count: trailing)
             } else {
                 rows.append(.gap(GapContent(path: file.path, index: index, hiddenCount: trailing, canExpand: true)))
@@ -440,17 +515,30 @@ struct DiffRowBuilder {
     private func composerContent(for key: ComposerKey, attachedToCard: Bool, inset: Double) -> ComposerRowContent {
         switch key {
         case .draft(.newThread(let anchor)):
-            ComposerRowContent(key: key, title: Self.composerTitle(for: anchor), submitTitle: "Add to review",
-                               sendNowTitle: "Comment now", attachedToCard: attachedToCard, leadingInset: inset)
+            return ComposerRowContent(key: key, title: Self.composerTitle(for: anchor), submitTitle: "Add to review",
+                                      sendNowTitle: "Comment now", attachedToCard: attachedToCard, leadingInset: inset)
         case .draft(.reply(let threadID)):
-            ComposerRowContent(key: key, title: "Reply to t\(threadID)", submitTitle: "Add to review",
-                               sendNowTitle: "Reply now", attachedToCard: attachedToCard, leadingInset: inset)
+            let state = layer.threads.first { $0.id == threadID }?.state
+            return ComposerRowContent(key: key, title: Self.replyTitle(for: state, agentName: agentName), submitTitle: "Add to review",
+                                      sendNowTitle: "Reply now", sendNowIsPrimary: state == .agentAsks,
+                                      attachedToCard: attachedToCard, leadingInset: inset)
         case .draft(.reviewSummary):
-            ComposerRowContent(key: key, title: "Review summary", submitTitle: "Save",
-                               sendNowTitle: nil, attachedToCard: attachedToCard, leadingInset: inset)
+            return ComposerRowContent(key: key, title: "Review summary", submitTitle: "Save",
+                                      sendNowTitle: nil, attachedToCard: attachedToCard, leadingInset: inset)
         case .edit:
-            ComposerRowContent(key: key, title: "Edit comment", submitTitle: "Save",
-                               sendNowTitle: nil, attachedToCard: attachedToCard, leadingInset: inset)
+            return ComposerRowContent(key: key, title: "Edit comment", submitTitle: "Save",
+                                      sendNowTitle: nil, attachedToCard: attachedToCard, leadingInset: inset)
+        }
+    }
+
+    /// Says what you are replying to, in the agent's name rather than the thread's number.
+    static func replyTitle(for state: ThreadState?, agentName: String?) -> String {
+        let agent = agentName ?? "the agent"
+        return switch state {
+        case .agentAsks: "Answer \(agent)'s question"
+        case .checkTheFix: "Reply to \(agent)'s fix"
+        case .agentDeclined: "Reply to \(agent)"
+        default: "Add a reply"
         }
     }
 

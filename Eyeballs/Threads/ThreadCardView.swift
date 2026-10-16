@@ -8,6 +8,7 @@ struct ThreadCardActions {
     var toggleExpanded: @MainActor () -> Void = {}
     var edit: @MainActor (Int) -> Void = { _ in }
     var delete: @MainActor (Int) -> Void = { _ in }
+    var deleteThread: @MainActor () -> Void = {}
 }
 
 /// One thread row in the pane: a full card, or one slim line for a resolved thread.
@@ -66,9 +67,9 @@ struct ThreadCard: View {
             }
             ForEach(Array(thread.comments.enumerated()), id: \.element.id) { index, comment in
                 if index > 0 {
-                    Divider().overlay(Color.diffBorder.opacity(0.6)).padding(.leading, 46)
+                    Divider().overlay(Color.diffBorder.opacity(0.6)).padding(.leading, 48)
                 }
-                CommentView(comment: comment, actions: actions)
+                CommentView(comment: comment, isFirst: index == 0, thread: thread, actions: actions)
             }
             if !content.hasComposerBelow {
                 Divider().overlay(Color.diffBorder)
@@ -84,22 +85,27 @@ struct ThreadCard: View {
         .accessibilityLabel("Thread t\(thread.id), \(thread.state.label), \(content.anchorText)")
     }
 
+    /// The thread's one state chip, plus "Outdated" when its lines are gone.
     private var header: some View {
         HStack(spacing: 8) {
             ThreadStateChip(state: thread.state)
+            if thread.isOutdated {
+                Chip(text: "Outdated", symbol: "clock.arrow.circlepath", tint: .gray)
+                    .help("The lines this thread was on are gone. It shows the code it was written on.")
+            }
             Text(content.anchorText)
-                .font(.system(size: 11.5, design: .monospaced))
+                .font(.subheadline.monospaced())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 8)
             Text("t\(thread.id)")
-                .font(.system(size: 11, design: .monospaced))
+                .font(.subheadline.monospaced())
                 .foregroundStyle(.tertiary)
             if thread.isResolved {
                 Button(action: actions.toggleExpanded) {
                     Image(systemName: "chevron.up")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                 }
                 .buttonStyle(.borderless)
                 .help("Collapse this resolved thread")
@@ -107,19 +113,20 @@ struct ThreadCard: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.vertical, 8)
         .background(Color.cardHeader)
     }
 
+    /// Reply, and Resolve once the agent has seen the thread. A draft has nothing to resolve.
     private var footer: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Button(action: actions.reply) {
                 HStack {
                     Text("Reply…").foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                 }
-                .font(.system(size: 13))
-                .padding(.horizontal, 10)
+                .font(.body)
+                .padding(.horizontal, 8)
                 .frame(height: 28)
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.diffBorder))
@@ -129,56 +136,70 @@ struct ThreadCard: View {
             .help("Reply in this thread (r)")
             .accessibilityLabel("Reply to thread t\(thread.id)")
 
-            Button(thread.isResolved ? "Reopen" : "Resolve") {
-                actions.setResolved(!thread.isResolved)
+            if thread.state != .draft {
+                Button(thread.isResolved ? "Reopen" : "Resolve") {
+                    actions.setResolved(!thread.isResolved)
+                }
+                .help(thread.isResolved ? "Open this thread again (e)" : "Mark this thread resolved (e)")
+                .accessibilityLabel(thread.isResolved ? "Reopen thread t\(thread.id)" : "Resolve thread t\(thread.id)")
             }
-            .controlSize(.regular)
-            .help(thread.isResolved ? "Open this thread again (e)" : "Mark this thread resolved (e)")
-            .accessibilityLabel(thread.isResolved ? "Reopen thread t\(thread.id)" : "Resolve thread t\(thread.id)")
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.vertical, 8)
         .background(Color.cardHeader)
     }
 }
 
+/// One comment. The thread's chip carries its state, so a reply's status is quiet text here,
+/// and "Pending" shows only beside your unsent replies in a thread the agent has seen.
 struct CommentView: View {
     let comment: CommentItem
+    let isFirst: Bool
+    let thread: ThreadItem
     let actions: ThreadCardActions
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             AvatarView(author: comment.author)
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
                     Text(comment.author.name)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.body.weight(.semibold))
+                        .padding(.trailing, 2)
                     Text(RelativeTime.text(for: comment.date))
-                        .font(.system(size: 12))
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .help(comment.date.formatted(date: .abbreviated, time: .shortened))
-                    if comment.isPending {
-                        Chip(text: "Pending", symbol: nil, tint: .yellow, isSmall: true)
-                            .help("In your review. The agent sees it when you submit.")
-                    }
                     if let status = comment.replyStatus {
-                        ReplyStatusChip(status: status)
+                        Text("· \(status.label.lowercased())")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                     }
                     if comment.isEdited {
-                        Text("edited")
-                            .font(.system(size: 11))
+                        Text("· edited")
+                            .font(.callout)
                             .foregroundStyle(.tertiary)
+                    }
+                    if comment.isPending, thread.hasSentComments {
+                        Chip(text: "Pending", symbol: nil, tint: .yellow, isSmall: true)
+                            .padding(.leading, 4)
+                            .help("In your review. The agent sees it when you submit.")
                     }
                     Spacer(minLength: 0)
                     if !comment.author.isAgent {
                         Menu {
                             Button("Edit") { actions.edit(comment.id) }
-                            Button("Delete", role: .destructive) { actions.delete(comment.id) }
+                            Divider()
+                            if deletesThread {
+                                Button(deleteTitle, role: .destructive, action: actions.deleteThread)
+                            } else {
+                                Button(deleteTitle, role: .destructive) { actions.delete(comment.id) }
+                            }
                         } label: {
                             Image(systemName: "ellipsis")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.callout.weight(.semibold))
                                 .foregroundStyle(.secondary)
-                                .frame(width: 22, height: 18)
+                                .frame(width: 24, height: 16)
                         }
                         .menuStyle(.borderlessButton)
                         .menuIndicator(.hidden)
@@ -190,8 +211,16 @@ struct CommentView: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
         .accessibilityElement(children: .contain)
+    }
+
+    /// The first comment opens the thread, so deleting it deletes the thread.
+    private var deletesThread: Bool { isFirst }
+
+    private var deleteTitle: String {
+        if isFirst { return thread.comments.count == 1 && comment.isPending ? "Delete" : "Delete Thread…" }
+        return comment.isPending ? "Delete" : "Delete…"
     }
 }
 
@@ -201,12 +230,12 @@ struct NoteLine: View {
     let tint: Color
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: symbol)
-                .font(.system(size: 11))
+                .font(.subheadline)
                 .foregroundStyle(tint)
             Text(text)
-                .font(.system(size: 12))
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -223,14 +252,14 @@ struct OriginalLines: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Originally:")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(lines.joined(separator: "\n"))
-                .font(.system(size: 12, design: .monospaced))
-                .lineSpacing(3)
+                .font(.callout.monospaced())
+                .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color.codeBlock))
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.diffBorder))
@@ -261,7 +290,7 @@ struct ResolvedThreadBar: View {
                     .fontWeight(.semibold)
                 Text("·").foregroundStyle(.tertiary)
                 Text("t\(content.thread.id)")
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.callout.monospaced())
                     .foregroundStyle(.secondary)
                 Text("·").foregroundStyle(.tertiary)
                 Text(MarkdownText.attributed(firstWords))
@@ -270,12 +299,12 @@ struct ResolvedThreadBar: View {
                     .truncationMode(.tail)
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
-            .font(.system(size: 12.5))
+            .font(.callout)
             .padding(.horizontal, 12)
-            .frame(height: 30)
+            .frame(height: 32)
             .background(RoundedRectangle(cornerRadius: 8).fill(Color.cardHeader))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(isFocused ? Color.accentColor : Color.diffBorder, lineWidth: isFocused ? 2 : 1))
             .contentShape(Rectangle())
