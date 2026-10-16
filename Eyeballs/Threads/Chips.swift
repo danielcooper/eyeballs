@@ -49,6 +49,40 @@ struct Chip: View {
     }
 }
 
+/// "+17 −6" in green and red. On a row selected in a focused list, green and red would not
+/// read on the selection colour, so both turn to the selected-text colour, as in Finder.
+struct LineCountsText: View {
+    let additions: Int
+    let deletions: Int
+    @Environment(\.backgroundProminence) private var prominence
+
+    var body: some View {
+        let selected = prominence == .increased
+        HStack(spacing: 4) {
+            Text("+\(additions)").foregroundStyle(selected ? Color.selectedText : Color.diffAddedText)
+            Text("−\(deletions)").foregroundStyle(selected ? Color.selectedText : Color.diffDeletedText)
+        }
+        .font(.caption.weight(.medium).monospaced())
+    }
+}
+
+/// "2 need you", in an orange that keeps 4.5:1 contrast, or the selected-text colour on a
+/// row selected in a focused list.
+struct NeedsYouText: View {
+    let count: Int
+    @Environment(\.backgroundProminence) private var prominence
+
+    var body: some View {
+        Text(Self.words(count))
+            .fontWeight(.semibold)
+            .foregroundStyle(prominence == .increased ? Color.selectedText : Color.needsYouText)
+    }
+
+    static func words(_ count: Int) -> String {
+        count == 1 ? "1 needs you" : "\(count) need you"
+    }
+}
+
 extension ThreadState {
     var symbol: String {
         switch self {

@@ -182,11 +182,7 @@ struct FileRow: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                 } else {
-                    HStack(spacing: 4) {
-                        Text("+\(file.additions)").foregroundStyle(Color.diffAddedText)
-                        Text("−\(file.deletions)").foregroundStyle(Color.diffDeletedText)
-                    }
-                    .font(.caption.weight(.medium).monospaced())
+                    LineCountsText(additions: file.additions, deletions: file.deletions)
                 }
                 ThreadCountBadge(count: threadCount)
             }
@@ -250,6 +246,7 @@ private struct LoadingFileList: View {
 
 struct ThreadCountBadge: View {
     let count: Int
+    @Environment(\.backgroundProminence) private var prominence
 
     var body: some View {
         if count > 0 {
@@ -258,7 +255,7 @@ struct ThreadCountBadge: View {
                 Text("\(count)")
             }
             .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(prominence == .increased ? AnyShapeStyle(Color.selectedText) : AnyShapeStyle(.secondary))
             .accessibilityLabel(count == 1 ? "1 open thread" : "\(count) open threads")
         }
     }

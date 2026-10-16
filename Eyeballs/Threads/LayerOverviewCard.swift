@@ -23,7 +23,7 @@ struct LayerOverviewCard: View {
                         .foregroundStyle(.secondary)
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(content.layer?.branch ?? "Layer")
-                            .font(.title3.weight(.semibold).monospaced())
+                            .font(.title3.weight(.semibold))
                             .lineLimit(1)
                             .truncationMode(.middle)
                         if let number = content.layer?.prNumber {

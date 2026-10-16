@@ -60,15 +60,21 @@ private struct StackSection: View {
                 .selectionDisabled()
         } label: {
             Label {
-                Text(stack.name)
-                    .font(.body.weight(.semibold))
-                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    Text(stack.name)
+                        .font(.body.weight(.semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    if needsYou > 0 {
+                        Chip(text: NeedsYouText.words(needsYou), symbol: nil, tint: .orange, isSmall: true)
+                    }
+                }
             } icon: {
                 Image(systemName: "square.stack.3d.up")
             }
-            .badge(needsYou)
+            .accessibilityElement(children: .combine)
             .accessibilityValue(needsYou == 1 ? "1 thread needs you" : "\(needsYou) threads need you")
-            .help(needsYou == 0 ? "Nothing needs you in this stack" : "Threads that need you: \(needsYou)")
+            .help(needsYou == 0 ? "Nothing needs you in this stack" : "Threads in this stack that need you: \(needsYou)")
         }
     }
 
@@ -93,7 +99,7 @@ struct LayerRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(layer.branch)
-                        .font(.body.monospaced())
+                        .font(.body)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 4)
@@ -104,16 +110,10 @@ struct LayerRow: View {
                         Text("#\(number)")
                     }
                     if layer.additions > 0 || layer.deletions > 0 {
-                        HStack(spacing: 4) {
-                            Text("+\(layer.additions)").foregroundStyle(Color.diffAddedText)
-                            Text("−\(layer.deletions)").foregroundStyle(Color.diffDeletedText)
-                        }
-                        .font(.caption.weight(.medium).monospaced())
+                        LineCountsText(additions: layer.additions, deletions: layer.deletions)
                     }
                     if layer.needsYouCount > 0 {
-                        Text(Self.needsYouText(layer.needsYouCount))
-                            .fontWeight(.semibold)
-                            .foregroundStyle(Color.orange)
+                        NeedsYouText(count: layer.needsYouCount)
                     }
                 }
                 .font(.subheadline)
@@ -125,7 +125,11 @@ struct LayerRow: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
-        .accessibilityAction(named: "Ask \(agentName ?? "the agent") to restack") { askToRestack() }
+        .accessibilityActions {
+            if layer.status == .needsRestack {
+                Button("Ask \(agentName ?? "the agent") to restack", action: askToRestack)
+            }
+        }
     }
 
     /// "Needs restack" says what to do: hover for why, click to ask the agent to restack.
@@ -145,10 +149,6 @@ struct LayerRow: View {
         } else {
             LayerStatusChip(status: layer.status)
         }
-    }
-
-    static func needsYouText(_ count: Int) -> String {
-        count == 1 ? "1 needs you" : "\(count) need you"
     }
 
     private var accessibilityText: String {
@@ -200,7 +200,7 @@ private struct TrunkRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 20, height: 20)
             Text(trunk)
-                .font(.body.monospaced())
+                .font(.body)
                 .foregroundStyle(.secondary)
         }
         .accessibilityLabel("Trunk branch \(trunk)")
