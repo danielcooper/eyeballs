@@ -74,6 +74,21 @@ extension Store {
         }
     }
 
+    /// Records that `eyeballs inbox` showed these submitted reviews to `sessionID`.
+    ///
+    /// A review with no comments of its own, such as an approval, only becomes `delivered` this
+    /// way, because `markDelivered(commentIDs:to:)` reaches reviews through their comments.
+    public func markReviewsDelivered(reviewIDs: [Int], to sessionID: Int?) throws {
+        guard !reviewIDs.isEmpty else { return }
+        let now = clock().databaseMilliseconds
+        try pool.write { db in
+            try db.execute(sql: """
+                UPDATE review SET status = 'delivered', delivered_at = ?, delivered_to = ?
+                WHERE status = 'submitted' AND id IN (\(databaseQuestionMarks(count: reviewIDs.count)))
+                """, arguments: [now, sessionID] + StatementArguments(reviewIDs))
+        }
+    }
+
     /// Records that the Stop hook blocked this session for `reasonKey`, such as `unreplied:7`.
     ///
     /// - Returns: true the first time, when the hook should block. False when it already

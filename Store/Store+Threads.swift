@@ -158,6 +158,16 @@ extension Store {
         }
     }
 
+    /// Hides a whole thread, the agent's replies included. Nothing is erased: the comments stay,
+    /// and every query skips a thread with `deleted_at` set.
+    public func deleteThread(threadID: Int) throws {
+        let now = clock().databaseMilliseconds
+        try pool.write { db in
+            _ = try existing(ThreadRecord.self, db, id: threadID)
+            try db.execute(sql: "UPDATE thread SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL", arguments: [now, threadID])
+        }
+    }
+
     /// Resolves a thread at the stack's newest revision. Only you do this, from the window.
     @discardableResult
     public func resolveThread(threadID: Int) throws -> ThreadRecord {
