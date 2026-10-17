@@ -63,13 +63,17 @@ struct MainView: View {
         guard let stack = model.selectedStack else { return "" }
         let layers = stack.layers.count == 1 ? "1 layer" : "\(stack.layers.count) layers"
         guard let revision = stack.revision else { return "No revision yet · \(layers)" }
-        return "r\(revision) · \(layers)"
+        return "Revision \(revision) · \(layers)"
     }
 }
 
 /// Says in words whether an agent is listening, with a dot that only repeats the words. Its
 /// menu holds Copy prompt, which the review bar shows only while no agent is listening.
+///
+/// The pill keeps one width whatever it says, so the layer navigator beside it never moves.
 struct AgentStatusMenu: View {
+    static let labelWidth: CGFloat = 168
+
     let model: ReviewWindowModel
 
     private var status: AgentStatus { model.agent }
@@ -90,14 +94,15 @@ struct AgentStatusMenu: View {
                     .font(.callout.weight(.medium))
                     .foregroundStyle(status.isListening ? .primary : .secondary)
                     .lineLimit(1)
+                    .truncationMode(.tail)
             }
+            .frame(width: Self.labelWidth)
             .padding(.horizontal, 8)
-            .fixedSize()
         }
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel("Agent: \(status.text)")
-        .help(status.isListening ? "An agent is waiting for your review. Click for Copy prompt." : "No agent is waiting. Click to copy a prompt that hands the review to one.")
+        .help(status.isListening ? "\(status.text). Click to copy a prompt that hands this review to an agent." : "No agent is listening. Click to copy a prompt that hands the review to one.")
     }
 }
 

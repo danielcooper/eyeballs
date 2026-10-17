@@ -82,7 +82,7 @@ struct StackItem: Identifiable, Hashable, Sendable {
     let id: Int
     var name: String
     var trunk: String
-    /// The newest revision number, shown as `r4`. Nil before the agent's first `eyeballs review`.
+    /// The newest revision number, shown as "Revision 4". Nil before the agent's first `eyeballs review`.
     var revision: Int?
     /// Bottom layer first. Layer 1 is the bottom; the sidebar shows them top first.
     var layers: [LayerItem]

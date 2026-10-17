@@ -120,7 +120,7 @@ extension DemoState {
             ]),
             DemoThread(id: 45, layerID: 13, anchor: lines("Web/Checkout.tsx", source.checkoutNew, "const total = sumMoney"), comments: [
                 comment(you, "This total is recomputed on every keystroke in the note field. Memoize it with `useMemo`.", ago(0.5)),
-            ], anchorNote: "Moved from line 98 (r3)"),
+            ], anchorNote: "Moved from line 98 in revision 3"),
             DemoThread(id: 46, layerID: 12, anchor: lines("Sources/API/Client.swift", source.clientNew, "request.timeoutInterval = 30"), comments: [
                 comment(you, "Is 30 seconds right for checkout? It feels long for a payment call.", ago(0.2), pending: true),
             ]),

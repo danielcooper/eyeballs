@@ -107,7 +107,7 @@ final class DemoReviewBackend: ReviewBackend {
         state.nextReviewNumber += 1
         state.lastSubmitted = SubmittedReview(number: number, verdict: verdict, date: Date(), deliveredAt: nil)
         state.drafts[.reviewSummary] = nil
-        model.agent = AgentStatus(text: "Claude reading review \(number)", isListening: true, agentName: "Claude")
+        model.agent = AgentStatus(text: "Claude reading", isListening: true, agentName: "Claude")
         publishAll()
         deliverSoon(review: number, verdict: verdict, threads: sentThreads)
     }
@@ -152,8 +152,9 @@ final class DemoReviewBackend: ReviewBackend {
             self.answer(targets)
             self.model.agent = Self.listening
             if !targets.isEmpty {
-                self.model.banner = Banner(message: "Claude pushed r\((self.state.stack.revision ?? 0) + 1) with fixes for review \(number).",
-                                           actionTitle: "Show r\((self.state.stack.revision ?? 0) + 1)")
+                let revision = (self.state.stack.revision ?? 0) + 1
+                self.model.banner = Banner(message: "Claude pushed revision \(revision) with fixes for review \(number).",
+                                           actionTitle: "Show Revision \(revision)")
             }
         }
     }

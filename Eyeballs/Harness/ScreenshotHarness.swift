@@ -168,7 +168,7 @@ final class ScreenshotHarness {
                             date: now.addingTimeInterval(-9_000), isPending: false, isEdited: false),
                 CommentItem(id: 911, author: claude, replyStatus: .addressed, body: "`setError(null)` now runs first.",
                             date: now.addingTimeInterval(-1_800), isPending: false, isEdited: false),
-            ], isResolved: false, state: .checkTheFix, anchorNote: "Found by content search. It was on line 30 in r3.", originalLines: []),
+            ], isResolved: false, state: .checkTheFix, anchorNote: "Found by content search. It was on line 30 in revision 3.", originalLines: []),
             ThreadItem(id: 92, anchor: .lines(LineRange(path: checkout.path, side: .head, start: hiddenLine, end: hiddenLine)), comments: [
                 CommentItem(id: 920, author: you, body: "This line moved out of the diff. The note above says so, and the thread stays at the top of its file.",
                             date: now.addingTimeInterval(-5_400), isPending: false, isEdited: false),
