@@ -483,25 +483,19 @@ final class UISelfTest {
             return record("delete_pending_can_be_undone", ["pass": false, "reason": "no line to comment on"])
         }
         let body = "Throwaway comment for the undo check."
-        print("TRACE add"); fflush(stdout)
         model.addComment(body, at: .lines(range), sendNow: false)
         await window.settle()
-        print("TRACE added"); fflush(stdout)
         guard let draft = model.layer?.threads.first(where: { $0.comments.first?.body == body }) else {
             return record("delete_pending_can_be_undone", ["pass": false, "reason": "the draft was not added"])
         }
         let pendingBefore = model.review.pendingCommentCount
-        print("TRACE before delete"); fflush(stdout)
         pane.deleteThread(draft.id)
         await window.settle()
         let deleted = model.layer?.threads.contains { $0.id == draft.id } == false && model.review.pendingCommentCount == pendingBefore - 1
         window.makeFirstResponder(table)
         let actionName = window.undoManager?.undoActionName ?? ""
-        print("TRACE before undo"); fflush(stdout)
         window.undoManager?.undo()
-        print("TRACE after undo"); fflush(stdout)
         await window.settle()
-        print("TRACE settled"); fflush(stdout)
         let restored = model.layer?.threads.first { $0.comments.first?.body == body && $0.anchor == draft.anchor }
         let draftCannotResolve: Bool
         if let restored {

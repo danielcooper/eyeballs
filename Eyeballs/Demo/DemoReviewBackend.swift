@@ -132,6 +132,31 @@ final class DemoReviewBackend: ReviewBackend {
         publishRepositories()
     }
 
+    // MARK: States for the screenshots
+
+    /// Puts a layer with no commits of its own on top of the stack, so the window shows a layer
+    /// that really is empty.
+    func addEmptyLayer(branch: String) -> LayerItem {
+        let position = (state.layers.map(\.item.position).max() ?? 0) + 1
+        let id = (state.layers.map(\.item.id).max() ?? 0) + 1
+        let item = LayerItem(id: id, position: position, branch: branch, prNumber: nil, fileCount: 0, additions: 0,
+                             deletions: 0, openThreadCount: 0, status: .empty)
+        state.layers.append(DemoLayer(item: item, commits: [], files: []))
+        publishRepositories()
+        return item
+    }
+
+    func removeLayer(id: Int) {
+        state.layers.removeAll { $0.item.id == id }
+        publishRepositories()
+    }
+
+    func setStatus(_ status: LayerStatus, ofLayerAt position: Int) {
+        guard let index = state.layers.firstIndex(where: { $0.item.position == position }) else { return }
+        state.layers[index].item.status = status
+        publishRepositories()
+    }
+
     // MARK: The pretend agent
 
     private func deliverSoon(review number: Int, verdict: Verdict, threads: [Int]) {

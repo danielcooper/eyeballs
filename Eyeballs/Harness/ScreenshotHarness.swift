@@ -211,13 +211,23 @@ final class ScreenshotHarness {
         await shoot("26-end-of-stack", window)
     }
 
+    /// A layer that really has no commits, the loading state, no layer picked, and an error.
     private func shootEmptyStates(_ window: HarnessWindow) async {
+        let backend = session.backend as? DemoReviewBackend
+        if let backend, let stack = model.selectedStack, let shown = model.selection {
+            let cleanup = backend.addEmptyLayer(branch: "cleanup")
+            model.select(LayerSelection(stackID: stack.id, layerID: cleanup.id))
+            await window.settle(400)
+            await shoot("14-layer-without-changes", window)
+            windowState.middleTab = .threads
+            await shoot("19-no-threads-yet", window)
+            windowState.middleTab = .files
+            model.select(shown)
+            backend.removeLayer(id: cleanup.id)
+            await window.settle(400)
+        }
+
         let shownLayer = model.layer
-        model.layer = LayerContent(layerID: -1, commits: [], files: [], threads: [])
-        await shoot("14-layer-without-changes", window)
-        windowState.middleTab = .threads
-        await shoot("19-no-threads-yet", window)
-        windowState.middleTab = .files
         model.layer = nil
         model.isLoadingLayer = true
         await shoot("15-loading", window)
@@ -238,18 +248,15 @@ final class ScreenshotHarness {
 
     /// A merged layer, an empty layer, and a review with no agent listening.
     private func shootLayerStates(_ window: HarnessWindow) async {
-        let repositories = model.repositories
+        guard let backend = session.backend as? DemoReviewBackend else { return }
         let agent = model.agent
-        if var stack = model.repositories.first?.stacks.first {
-            if let index = stack.layers.firstIndex(where: { $0.position == 1 }) { stack.layers[index].status = .merged }
-            stack.layers.append(LayerItem(id: 14, position: 4, branch: "cleanup", prNumber: nil, fileCount: 0, additions: 0,
-                                          deletions: 0, openThreadCount: 0, status: .empty))
-            model.repositories[0].stacks[0] = stack
-        }
+        backend.setStatus(.merged, ofLayerAt: 1)
+        let cleanup = backend.addEmptyLayer(branch: "cleanup")
         model.agent = .notListening
         await window.settle()
         await shoot("28-merged-empty-and-no-agent", window)
-        model.repositories = repositories
+        backend.removeLayer(id: cleanup.id)
+        backend.setStatus(.ready, ofLayerAt: 1)
         model.agent = agent
         await window.settle()
     }
