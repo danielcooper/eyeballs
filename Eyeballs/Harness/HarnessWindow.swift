@@ -29,14 +29,15 @@ final class HarnessWindow: NSWindow {
         class_replaceMethod(popoverClass, NSSelectorFromString("hasKeyAppearance"), imp_implementationWithBlock(alwaysTrue), "B@:")
     }
 
-    /// Any view in a plain offscreen window, such as the Keyboard Shortcuts window.
-    static func make<Content: View>(_ content: Content, size: NSSize, bridgesToolbar: Bool = false) -> HarnessWindow {
+    /// Any view in a plain offscreen window. With a title, the window has a title bar of its own
+    /// above the content, as the Keyboard Shortcuts window does.
+    static func make<Content: View>(_ content: Content, size: NSSize, bridgesToolbar: Bool = false, title: String? = nil) -> HarnessWindow {
         let host = NSHostingController(rootView: content.environment(\.controlActiveState, .key))
         if bridgesToolbar { host.sceneBridgingOptions = [.toolbars, .title] }
-        let window = HarnessWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-            backing: .buffered, defer: false)
+        var style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
+        if title == nil { style.insert(.fullSizeContentView) }
+        let window = HarnessWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: style, backing: .buffered, defer: false)
+        if let title { window.title = title }
         window.isReleasedWhenClosed = false
         window.toolbarStyle = .unified
         window.contentViewController = host

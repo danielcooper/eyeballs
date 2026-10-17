@@ -19,7 +19,7 @@ struct EyeballsApp: App {
             ReviewCommands(session: appDelegate.session)
         }
 
-        Window("Keyboard Shortcuts", id: KeyboardShortcutsView.windowID) {
+        Window(KeyboardShortcutsView.title, id: KeyboardShortcutsView.windowID) {
             KeyboardShortcutsView()
         }
         .windowResizability(.contentSize)

@@ -277,11 +277,10 @@ final class ScreenshotHarness {
 
     private func shootKeyboardShortcuts() async {
         let table = KeyboardShortcutsTable()
-            .frame(width: 440, alignment: .top)
-            .padding(.top, 28)
+            .frame(width: 460)
             .frame(maxHeight: .infinity, alignment: .top)
             .background(Color(nsColor: .windowBackgroundColor))
-        let window = HarnessWindow.make(table, size: NSSize(width: 440, height: 660))
+        let window = HarnessWindow.make(table, size: NSSize(width: 460, height: 740), title: KeyboardShortcutsView.title)
         await window.settle(400)
         await shoot("30-keyboard-shortcuts", window)
         window.close()
