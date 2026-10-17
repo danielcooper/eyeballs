@@ -81,6 +81,7 @@ jobs:
           plutil -p "$app/Contents/Info.plist" | grep -E 'CFBundleShortVersionString|CFBundleVersion'
           "$cli" --version
           "$cli" --version | grep -qF "eyeballs $(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist") ($(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist"))"
+          EYEBALLS_HOME="$RUNNER_TEMP/eyeballs-home" "$cli" doctor --json > /dev/null
 
       - name: Package
         run: |
