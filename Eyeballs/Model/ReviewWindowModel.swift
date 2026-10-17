@@ -11,6 +11,9 @@ final class ReviewWindowModel {
     var repositories: [RepositoryItem] = []
     var selection: LayerSelection?
     var layer: LayerContent?
+    /// Every thread in the selected stack, keyed by layer ID, for the whole-stack thread list and
+    /// for moving to the next thread that needs you on another layer.
+    var threadsByLayer: [Int: [ThreadItem]] = [:]
     var review = PendingReview()
     var agent = AgentStatus.notListening
     var banner: Banner?
@@ -35,6 +38,7 @@ final class ReviewWindowModel {
     func reply(_ body: String, to threadID: Int, sendNow: Bool) { backend?.reply(body, to: threadID, sendNow: sendNow) }
     func editComment(_ commentID: Int, body: String) { backend?.editComment(commentID, body: body) }
     func deleteComment(_ commentID: Int) { backend?.deleteComment(commentID) }
+    func deleteThread(_ threadID: Int) { backend?.deleteThread(threadID) }
     func setResolved(_ resolved: Bool, threadID: Int) { backend?.setResolved(resolved, threadID: threadID) }
     func draft(for key: DraftKey) -> String { backend?.draft(for: key) ?? "" }
     func saveDraft(_ text: String, for key: DraftKey) { backend?.saveDraft(text, for: key) }
@@ -54,6 +58,8 @@ protocol ReviewBackend: AnyObject {
     func reply(_ body: String, to threadID: Int, sendNow: Bool)
     func editComment(_ commentID: Int, body: String)
     func deleteComment(_ commentID: Int)
+    /// Deletes a thread with every comment in it, the agent's replies included.
+    func deleteThread(_ threadID: Int)
     func setResolved(_ resolved: Bool, threadID: Int)
     func draft(for key: DraftKey) -> String
     func saveDraft(_ text: String, for key: DraftKey)
@@ -76,7 +82,7 @@ struct StackItem: Identifiable, Hashable, Sendable {
     let id: Int
     var name: String
     var trunk: String
-    /// The newest revision number, shown as `r4`. Nil before the agent's first `eyeballs review`.
+    /// The newest revision number, shown as "Revision 4". Nil before the agent's first `eyeballs review`.
     var revision: Int?
     /// Bottom layer first. Layer 1 is the bottom; the sidebar shows them top first.
     var layers: [LayerItem]
@@ -94,6 +100,8 @@ struct LayerItem: Identifiable, Hashable, Sendable {
     var deletions: Int
     var openThreadCount: Int
     var status: LayerStatus
+    /// Threads on this layer that need you. The stack's badge is the sum over its layers.
+    var needsYouCount = 0
 }
 
 enum LayerStatus: Hashable, Sendable {
@@ -141,6 +149,10 @@ struct FileItem: Identifiable, Hashable, Sendable {
     /// Empty when the file was deleted or is binary.
     var newLines: [String]
     var oldLines: [String]
+    /// The bytes of a binary image file on each side, so the pane can preview it. Nil for
+    /// anything that is not an image, or when that side does not exist.
+    var newImage: Data? = nil
+    var oldImage: Data? = nil
 }
 
 enum FileChange: Hashable, Sendable {
@@ -198,8 +210,9 @@ struct ThreadItem: Identifiable, Hashable, Sendable {
     var comments: [CommentItem]
     var isResolved: Bool
     var state: ThreadState
-    /// Said in words when the thread moved since it was written, for example
-    /// "Moved from line 98 (r3)" or "Outdated: the lines this thread was on are gone".
+    /// Said in words when the thread moved since it was written, for example "Moved from line 98
+    /// in revision 3". For an outdated thread it says where the lines were, such as "Was near
+    /// line 8 in revision 3."; the card's Outdated chip already says that they are gone.
     var anchorNote: String?
     /// The original lines, shown when the thread is outdated.
     var originalLines: [String]
@@ -292,6 +305,8 @@ enum Verdict: Hashable, Sendable, CaseIterable {
 struct AgentStatus: Hashable, Sendable {
     var text: String
     var isListening: Bool
+    /// The agent's name, such as "Claude", for lines like "waiting for Claude". Nil says "the agent".
+    var agentName: String? = nil
 
     static let notListening = AgentStatus(text: "No agent is listening", isListening: false)
 }
