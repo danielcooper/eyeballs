@@ -21,7 +21,7 @@ final class DiffRowView: NSTableRowView {
     override func drawSeparator(in dirtyRect: NSRect) {}
 }
 
-/// The sticky header at the top of each file: collapse, path, counts, "Comment on file" and
+/// The sticky header at the top of each file: collapse, path, counts, a comment button and
 /// the Viewed box.
 @MainActor
 final class FileHeaderView: NSView {
@@ -57,15 +57,13 @@ final class FileHeaderView: NSView {
         threadsLabel.font = .systemFont(ofSize: 11, weight: .medium)
         threadsLabel.textColor = .secondaryLabelColor
 
-        commentButton.title = "Comment on file"
         commentButton.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
-        commentButton.imagePosition = .imageLeading
+        commentButton.imagePosition = .imageOnly
         commentButton.bezelStyle = .accessoryBarAction
         commentButton.controlSize = .small
-        commentButton.font = .systemFont(ofSize: 11)
         commentButton.target = self
         commentButton.action = #selector(commentOnFile)
-        commentButton.toolTip = "Start a thread about the whole file"
+        commentButton.toolTip = "Comment on this file"
 
         viewedBox.controlSize = .small
         viewedBox.font = .systemFont(ofSize: 11)
@@ -143,14 +141,12 @@ final class FileHeaderView: NSView {
     private static let pathX: CGFloat = 52
     private static let minimumPathWidth: CGFloat = 120
 
-    /// Makes room for the path in a narrow row: "Comment on file" drops to its icon first, then
-    /// the thread count goes, then the change chip.
+    /// Makes room for the path in a narrow row: the thread count goes first, then the change chip.
     private func fitTrailingItems() {
         guard let content else { return }
         countsLabel.sizeToFit()
         threadsLabel.sizeToFit()
         viewedBox.sizeToFit()
-        commentButton.imagePosition = .imageLeading
         commentButton.sizeToFit()
         threadsLabel.isHidden = content.threadCount == 0
         changeChip.isHidden = changeChip.text.isEmpty
@@ -159,10 +155,6 @@ final class FileHeaderView: NSView {
             if !threadsLabel.isHidden { used += threadsLabel.frame.width + 12 }
             if !changeChip.isHidden { used += changeChip.fittingSize.width + 8 }
             return bounds.width - Self.pathX - used
-        }
-        if pathRoom() < Self.minimumPathWidth {
-            commentButton.imagePosition = .imageOnly
-            commentButton.sizeToFit()
         }
         if pathRoom() < Self.minimumPathWidth { threadsLabel.isHidden = true }
         if pathRoom() < Self.minimumPathWidth { changeChip.isHidden = true }
