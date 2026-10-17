@@ -86,8 +86,7 @@ struct AgentStatusMenu: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "circle.fill")
-                    .font(.caption2)
-                    .imageScale(.small)
+                    .font(.system(size: 10))
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(status.isListening ? Color.green : Color.secondary)
                 Text(status.text)
@@ -98,7 +97,11 @@ struct AgentStatusMenu: View {
             }
             .frame(width: Self.labelWidth)
             .padding(.horizontal, 8)
+            .contentShape(Rectangle())
         }
+        // A plain menu draws its label as given; the toolbar's own menu style sizes it to the text.
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel("Agent: \(status.text)")
