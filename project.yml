@@ -105,6 +105,25 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: coops.eyeballs.store-tests
         GENERATE_INFOPLIST_FILE: YES
 
+  EyeballsBackendTests:
+    type: bundle.unit-test
+    platform: macOS
+    # The service runs without a window, so these tests compile its sources, and the window model it fills, themselves.
+    sources:
+      - Tests/BackendTests
+      - Eyeballs/Backend/Service
+      - Eyeballs/Model/ReviewWindowModel.swift
+      - Eyeballs/Utilities/Logger.swift
+    dependencies:
+      # libEyeballsStore.a carries GRDB and EyeballsKit. Listing either here too links it twice.
+      - target: EyeballsStore
+      - package: EyeballsCore
+        product: EyeballsCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: coops.eyeballs.backend-tests
+        GENERATE_INFOPLIST_FILE: YES
+
   eyeballs-cli:
     type: tool
     platform: macOS
@@ -133,6 +152,7 @@ schemes:
     test:
       targets:
         - EyeballsStoreTests
+        - EyeballsBackendTests
         - package: EyeballsCore/EyeballsCoreTests
     profile:
       environmentVariables:
