@@ -20,6 +20,17 @@ Eyeballs is at an early stage. This version opens an empty window, and the `eyeb
 
 Requires macOS 15 or later.
 
+## Your data
+
+Eyeballs keeps its database in `~/Library/Application Support/Eyeballs/`, readable only by you. Debug builds use `Eyeballs-Debug/` beside it, so they never touch your real reviews.
+
+It backs the database up once a day, and before every upgrade that changes the database, into the `Backups` folder there. It keeps the 14 newest daily backups. To restore one:
+
+1. Quit Eyeballs.
+2. Delete `eyeballs.sqlite`, `eyeballs.sqlite-wal` and `eyeballs.sqlite-shm`.
+3. Copy the backup you want to `eyeballs.sqlite`.
+4. Open Eyeballs.
+
 ## Building from source
 
 The project uses [XcodeGen](https://github.com/yonaskolb/XcodeGen) to generate the Xcode project from `project.yml`.
@@ -74,4 +85,4 @@ Copyright © 2026 Daniel Cooper.
 
 Eyeballs is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](LICENSE).
 
-Eyeballs uses [Swift Argument Parser](https://github.com/apple/swift-argument-parser) by Apple, under the Apache License 2.0.
+Eyeballs uses [Swift Argument Parser](https://github.com/apple/swift-argument-parser) by Apple, under the Apache License 2.0, and [GRDB](https://github.com/groue/GRDB.swift) by Gwendal Roué, under the MIT License.
