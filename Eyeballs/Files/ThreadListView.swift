@@ -22,9 +22,12 @@ struct ThreadListView: View {
                     .pickerStyle(.inline)
                 } label: {
                     Image(systemName: isFiltered ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        .imageScale(.large)
                         .foregroundStyle(isFiltered ? Color.accentColor : Color.secondary)
+                        .contentShape(Rectangle())
                 }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.button)
+                .buttonStyle(.plain)
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help("Show only some threads: \(windowState.threadFilter.label)")
@@ -46,11 +49,11 @@ struct ThreadListView: View {
         let scoped = threadsInScope
         let shown = scoped.filter(windowState.threadFilter.includes).count
         return HStack(spacing: 8) {
-            Text("\(windowState.threadFilter.showingText) · \(shown) of \(scoped.count)")
+            // No-break spaces keep "· 1 of 10" together when the line wraps.
+            Text("\(windowState.threadFilter.showingText)\u{00A0}·\u{00A0}\(shown)\u{00A0}of\u{00A0}\(scoped.count)")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+                .lineLimit(1...2)
             Spacer(minLength: 4)
             Button("Show All") { windowState.threadFilter = .all }
                 .controlSize(.small)
