@@ -3,7 +3,7 @@
 - **Purpose:** Build Eyeballs from this design. Eyeballs is a native macOS app where you review a coding agent's stack of PRs layer by layer, and the agent replies and fixes.
 - **For:** the agents that build PRs 1 to 15 from it, and the people who review those PRs.
 - **Date:** 2026-10-16.
-- **Status:** approved. PR 0, the diff pane spike, is done. PR 1 commits this file. Nothing else is built yet.
+- **Status:** approved. PR 0, the diff pane spike, is done. PRs 1 to 8 are built and connected on the `mvp` branch: the whole loop works from a terminal. PR 9, the plugin, is next.
 - **Words used here:**
   - **"You"** means the reviewer: the person who reads the stack in Eyeballs and comments on it.
   - **"The agent"** means the coding agent that submits the stack and replies.
@@ -207,6 +207,7 @@ Each item gives the choice, then the reason. Sections A to H hold the detail.
 | Backups | `~/Library/Application Support/Eyeballs/Backups/`: 14 daily backups, plus one before each migration |
 | Socket | `~/Library/Application Support/Eyeballs/run/eyeballs.sock` (folder 0700, socket 0600) |
 | Instance lock | `~/Library/Application Support/Eyeballs/run/app.lock` |
+| Unsent drafts | `~/Library/Application Support/Eyeballs/drafts.json` (file 0600): composer text you have not added or sent, by stack, layer and composer. Schema 1 has no table for it. |
 | Caches | `~/Library/Caches/coops.eyeballs/`: blob-pair diffs and highlight runs. Safe to delete. |
 | Pins | `refs/eyeballs/<install-id>/<head-sha>` in each repo |
 | Logs | `os.Logger`, subsystem `coops.eyeballs`. A `Log` enum with categories `app`, `server`, `git`, `store`, `port`, `ui`, after [wreckingball's Logger.swift](https://github.com/danielcooper/wreckingball/blob/main/Wreckingball/Utilities/Logger.swift). |
@@ -518,6 +519,7 @@ A review moves through `draft`, then `submitted`, then `delivered` when `inbox` 
 - **Refuse newer schemas.** If `schemaVersion` is greater than 1, return `unsupported_catalog`.
 - **Trust live refs.** Use `refs/heads/<branch>`, never the catalog's `head`. In a real gh-stack repository checked during design, every recorded head differed from the live branch tip.
 - **Pick the base by rule.** Keep the first candidate that is an ancestor of the head: `parent_tip`, then `recorded_base`, then `fork_point`, then `merge_base`. Store which rule won. Any rule other than `parent_tip` shows "Needs restack".
+- **Guard the base.** A candidate counts only if it contains the head's merge base with its parent and the head's merge base with the trunk. So a layer never shows commits that its parent or the trunk already has. When every candidate fails this check, the base is the trunk's merge base with the head, with rule `merge_base` and the trunk as the parent ref. Without the guard, the rules gave wrong layers on a real gh-stack repository. A stale recorded base put 66 commits into a layer that has 8. A parent squash-merged into the trunk made the merge-base rule show 33 commits instead of 2.
 - **Choose the newer trunk.** For layer 1, compute against both `<trunk>` and `origin/<trunk>`, and use the newer result.
 - **Handle plain branches too.** `--branch B` reviews a single branch, with the trunk from `--trunk`, else `origin/HEAD`, else `main`. `--branches a,b,c --trunk T` reviews an explicit stack.
 - **Match layers in version 1** by the same branch, then by `renamed_branches` from a `pending_submit` modify file, then by the same PR number. Anything else becomes a new layer. A left-over old layer becomes `merged` if the catalog says so, otherwise `dropped`.
@@ -1072,7 +1074,7 @@ The pane is a view-based `NSTableView` inside `NSViewControllerRepresentable`, w
 - **Dock badge:** counts threads that need you.
 - **Agent status pill:** one of these:
   - **Listening:** "Claude: listening"
-  - **Working:** "Claude: working on review 7, 3 of 5 replied"
+  - **Working:** "Claude: working, 3 of 5 replied". The pill keeps one width, so it leaves out the review number.
   - **Not listening:** "Claude: not listening. Copy prompt"
 
 ### Keyboard shortcuts
@@ -1353,12 +1355,13 @@ Each was read from the project's GitHub releases page with `gh api repos/<owner>
 
 ```text
 project.yml                    Eyeballs.xcodeproj is generated and gitignored
-Eyeballs/                      App: App/, Window/, Sidebar/, DiffPane/, Threads/, Review/, Server/, Log.swift, Info.plist
+Eyeballs/                      App: App/, Window/, Sidebar/, DiffPane/, Threads/, Review/, Backend/, Utilities/, Info.plist
 Store/                         EyeballsStore: schema, migrations, Migrations.lock, records, backups (from PR 5)
 CLI/                           eyeballs tool: one file per command
 Packages/EyeballsCore/         Local package, no dependencies: Sources/EyeballsCore, Sources/EyeballsKit, Tests
 Packages/EyeballsGrammars/     Vendored tree-sitter grammars, each with its LICENSE and SOURCES.md (from PR 14)
 Tests/StoreTests/              Store tests against $EYEBALLS_HOME (from PR 5)
+Tests/BackendTests/            The review service against real fixture repos and a temporary store (from PR 8)
 Scripts/fake-agent.sh          The agent loop without an agent (from PR 8)
 plugin/                        Claude Code plugin (from PR 9)
 .claude-plugin/marketplace.json  (from PR 9)
@@ -1376,7 +1379,7 @@ The PR 1 shape is the committed [`project.yml`](../project.yml). Later PRs chang
 
 ### What PR 5 adds to project.yml
 
-PR 5 adds GRDB, the `EyeballsStore` target and its tests, the `EyeballsKit` product to the app, and the Profile action's home. Merge these keys into the PR 1 file.
+PR 5 adds GRDB, the `EyeballsStore` target and its tests, and the Profile action's home. The app and the tests get GRDB and `EyeballsKit` through the store, as the first bullet below explains. Merge these keys into the PR 1 file.
 
 ```yaml
 packages:
@@ -1391,17 +1394,16 @@ targets:
     sources: [Store]
     dependencies:
       - package: EyeballsCore
-        product: EyeballsCore
+        product: EyeballsKit
+        link: true
       - package: GRDB
+        link: true
 
   Eyeballs:
     dependencies:
       - target: EyeballsStore
       - package: EyeballsCore
         product: EyeballsCore
-      - package: EyeballsCore
-        product: EyeballsKit
-      - package: GRDB
       - target: eyeballs-cli
         embed: true
         codeSign: true
@@ -1417,7 +1419,6 @@ targets:
       - target: EyeballsStore
       - package: EyeballsCore
         product: EyeballsCore
-      - package: GRDB
 
 schemes:
   Eyeballs:
@@ -1433,7 +1434,8 @@ schemes:
         EYEBALLS_HOME: "${HOME}/Library/Application Support/Eyeballs-Debug"
 ```
 
-- **`EyeballsStoreTests` lists `EyeballsCore` itself (fix 4).** XcodeGen never links package products into a static library (`let link = dependency.link ?? (target.type != .staticLibrary)` in [PBXProjGenerator.swift](https://github.com/yonaskolb/XcodeGen/blob/master/Sources/XcodeGenKit/PBXProjGenerator.swift)), and `transitivelyLinkDependencies` defaults to false. The app lists `EyeballsCore` for the same reason.
+- **`libEyeballsStore.a` carries GRDB and `EyeballsKit`, so the app and the test bundles list neither.** The store lists both with `link: true`. Without it, Xcode never passes on GRDB's SQLite module map, and the store fails to build with "unable to resolve module dependency: 'GRDBSQLite'". Xcode then puts a static library's package products inside its archive. A target that lists GRDB or `EyeballsKit` again links it twice and fails with hundreds of duplicate symbols. Such a target can still `import` both. If the store ever lists the `EyeballsCore` product too, take `EyeballsCore` off the app and the tests as well.
+- **The app and `EyeballsStoreTests` list `EyeballsCore` themselves (fix 4).** By default XcodeGen links no package product into a static library (`let link = dependency.link ?? (target.type != .staticLibrary)` in [PBXProjGenerator.swift](https://github.com/yonaskolb/XcodeGen/blob/master/Sources/XcodeGenKit/PBXProjGenerator.swift)), `transitivelyLinkDependencies` defaults to false, and the store does not use `EyeballsCore`.
 - **The Profile action uses the Debug home (fix 1).** XcodeGen profiles with the Release config ([ProjectSpec.md](https://github.com/yonaskolb/XcodeGen/blob/master/Docs/ProjectSpec.md), "release: profile, archive"). Without this variable, an Instruments run would open the real store and socket. XcodeGen expands `${HOME}` when it generates the project. The instance lock still stops a profiled build and a Debug build running at once.
 
 ### What PR 9 adds
@@ -1674,7 +1676,7 @@ The sections below add the detail each builder needs. They never replace a row o
   - **The whole-stack unreplied check** in `review` (fix 11)
   - **The Dock badge,** the status pill and Copy prompt
   - **Send now** as a one-comment submit that ports (fix 13)
-  - **A Debug-only `debug.submitReview` operation**
+  - **A Debug-only `debug.submitReview` operation,** which a script sends with the hidden Debug-only command `eyeballs debug-submit-review`. It comments as you, then submits, through the same steps as the window. A second hidden command, `eyeballs debug-snapshot-window`, draws the window into a PNG.
 - **Verify:**
   - **Fake agent:** `Scripts/fake-agent.sh` runs `review`, `debug.submitReview`, `wait`, `inbox`, `reply` and `review`, and checks every output.
   - **Budgets:** Golden packets enforce the token budgets.
@@ -1788,7 +1790,7 @@ Each assumption names the PR that checks it.
 6. **Peer credentials:** `NWListener` does not expose them, so the server uses a BSD socket for `getpeereid`. PR 5.
 7. **XcodeGen embedding:** a `tool` target embeds into `Contents/Helpers` with `codeSign: true`. The design checked this against XcodeGen's and swift-build's source, but no build has run it yet. PR 1.
 8. **Version reading:** `CREATE_INFOPLIST_SECTION_IN_BINARY` lets the tool read its own version. The fallback is reading the enclosing app's `Info.plist`. PR 1.
-9. **Linking:** GRDB links once, into the app and the test bundle, with no duplicate symbols. The fallback is XcodeGen's `transitivelyLinkDependencies` option. PR 5.
+9. **Linking:** checked in PR 5. GRDB links once, through `libEyeballsStore.a`, with no duplicate symbols. [What PR 5 adds to project.yml](#what-pr-5-adds-to-projectyml) gives the rule.
 10. **Profile home:** XcodeGen expands `${HOME}` at generate time ([ProjectSpec.md](https://github.com/yonaskolb/XcodeGen/blob/master/Docs/ProjectSpec.md)), and Xcode passes the Profile action's environment to the profiled app. PR 5.
 11. **Warm-up hitch:** pre-warming a hosting view at launch removes the first-scroll hitch. PR 4.
 12. **Context expansion:** expanding context from blobs stays correct whatever the `-U` size. This rests on reasoning, and no test checks it yet. PR 13.

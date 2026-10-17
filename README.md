@@ -8,7 +8,16 @@ When an agent builds a stack of pull requests, you want to read it and leave it 
 
 ## Status
 
-Eyeballs is at an early stage. This version opens an empty window, and the `eyeballs` command only prints its version. The review window and the agent commands arrive over the next pull requests. The plan is in [the design document](docs/design.md).
+Eyeballs is at an early stage. The whole review loop works from a terminal. The Claude Code plugin, which wakes the agent for you, comes next. The plan is in [the design document](docs/design.md).
+
+## Trying the loop
+
+1. **Install the command.** Open Eyeballs, then choose **Eyeballs → Install Command Line Tool…**. It links `~/.local/bin/eyeballs` to the command inside the app.
+2. **The agent opens a review.** With its stack committed, the agent runs `eyeballs review` in your repository, then `eyeballs wait` in the background.
+3. **You review.** Comment in the window, then choose **Finish review**.
+4. **The agent replies.** It runs `eyeballs inbox`, fixes the code, answers every thread with `eyeballs reply --file -`, and runs `eyeballs review` again.
+
+`Scripts/fake-agent.sh` runs the same loop against a Debug build, with the script playing the agent and checking every answer.
 
 ## How it will work
 
@@ -23,6 +32,8 @@ Requires macOS 15 or later.
 ## Your data
 
 Eyeballs keeps its database in `~/Library/Application Support/Eyeballs/`, readable only by you. Debug builds use `Eyeballs-Debug/` beside it, so they never touch your real reviews.
+
+Comments you have started but not added or sent are saved in `drafts.json` in the same folder, so they survive a restart.
 
 It backs the database up once a day, and before every upgrade that changes the database, into the `Backups` folder there. It keeps the 14 newest daily backups. To restore one:
 
