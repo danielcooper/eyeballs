@@ -94,6 +94,10 @@ final class ScreenshotHarness {
         }
         await shoot("08-resolved-thread", window)
 
+        windowState.revealThread(41)
+        await window.settle()
+        await shoot("32-folded-thread", window)
+
         model.selectLayer(atPosition: 3)
         await window.settle(400)
         windowState.middleTab = .threads

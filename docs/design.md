@@ -558,12 +558,12 @@ Without these rules, the loop stalls after any `gh stack modify` until someone p
 | `eyeballs show tN [--context N] [--json]` | The agent or a subagent prints one thread in full, with code and anchor history. | Yes |
 | `eyeballs reply (--file PATH\|- \| --json-file PATH\|-) [--json]` | The agent or a subagent replies to many threads in one call, using `## t41 addressed` blocks. | Yes |
 | `eyeballs reply tN addressed\|declined\|question (--body TEXT \| --body-file PATH\|-) [--at PATH:A-B]... [--json]` | The agent or a subagent replies to one thread. | Yes |
-| `eyeballs threads [--open\|--all] [--json]` | The agent prints one line per thread. | No |
+| `eyeballs threads [--open\|--all] [--stack sN] [--json]` | The agent prints one line per thread. | No |
 | `eyeballs status [--brief] [--json]` | The agent, the skill and hooks get one status line. Always exits 0. | No |
 | `eyeballs attach [--stack sN]` | A session takes over as driver. | Yes |
 | `eyeballs watch` | For the plugin monitor only. Never exits. | No |
 | `eyeballs hook session-start\|stop\|session-end` | For hooks only. Always exits 0. | No |
-| `eyeballs open [PATH]` | You open a repo in the window. | Yes, in front |
+| `eyeballs open [PATH]` | Brings the window to the front. Without a path it shows the stack you are working on and never adds a stack; with one it opens that repo's stack. | Yes, in front |
 | `eyeballs doctor [--strict] [--json]` | You and CI check the install and the store's invariants. It prints the permission line to add. It exits 0 when the app is not running, unless you pass `--strict`, which makes that exit 69 (fix 4). | No |
 | `eyeballs --version` | Prints `eyeballs 0.1.0 (42) protocol 1`. | No |
 
@@ -572,6 +572,7 @@ Without these rules, the loop stalls after any `gh stack modify` until someone p
 - **Durations:** `--timeout` accepts `90s`, `30m` or `2h`. With no timeout, a command waits forever.
 - **Agent detection:** the CLI reads `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID` and `CLAUDE_PID`. `--agent` and `--session` override them. It reads the start time of `CLAUDE_PID` with `proc_pidinfo` (`pbi_start_tvsec`, SDK `usr/include/sys/proc_info.h`).
 - **IDs:** thread IDs are accepted as `t41` or `41`.
+- **Which stack:** a command without `--stack` uses a stack the caller's session drives: the one holding the branch checked out in the caller's folder, if any, else the newest. Only when the session drives none does it fall back to the stack holding that branch. An agent working in another worktree, or on a branch the stack does not have, still gets its own stack.
 - **Output:** stdout carries exactly one document, either text or JSON. Errors also print one human line on stderr.
 - **App not running:** a command that does not start the app exits 69. The exceptions are `wait`, `watch`, `status`, `hook`, `doctor` and `--version`, which follow their own rules above.
 - **Driver rule:** `review` and `attach` make the caller the driver. When the driver's session has ended, or its process and start time are no longer alive, the role moves to any session that calls `inbox`, `wait` or `reply` (fix 11). A live driver keeps the role: then `inbox` reports `not_driver` as its `status`, `wait` reports it as its `event`, and both exit 0. The app saves the `reply` with a `not_driver` warning.
@@ -752,6 +753,8 @@ Still waiting on you: t44 (answer). Next: fix t44, reply, then run `eyeballs rev
 ```
 
 The same with `--json`: `{"schema":"eyeballs.reply/1","ok":true,"replied":[{"thread":"t41","status":"addressed","comment":"c210"}],"waiting_on_you":["t44"],"warnings":[],"next":"reply_remaining"}`. `warnings` can hold `not_driver` and `thread_resolved`.
+
+When nothing waits on the agent, `next` depends on the batch. With an `addressed` reply the agent changed code, so it is `run_review`. With only `declined` and `question` replies nothing changed, so it is `run_wait_in_background`, and the text says so.
 
 ### Other commands
 
@@ -1007,7 +1010,7 @@ Then go back to "Submit a revision".
   - **Files:** Layer overview first, then each file with its counts, thread badge and Viewed box (from PR 11).
   - **Threads:** every thread, filtered by Needs you, Waiting on agent, Outdated or Resolved.
 - **Diff pane:** on the right. [How the diff pane works](#how-the-diff-pane-works) gives its rules.
-- **The view never moves on its own.** A newer revision shows a banner with a "Show r5" button. If branch tips moved without a submit, a "Live changes" pill offers Take snapshot, which creates a `human_start` revision.
+- **The view follows the agent.** When the agent submits a new revision of the stack on screen, the window moves to it, keeps your place, and says "Now showing revision 5". It stays put only while you have unsent text for a new comment on lines, because those line numbers belong to the revision on screen; then a banner offers "Show r5". If branch tips moved without a submit, a "Live changes" pill offers Take snapshot, which creates a `human_start` revision.
 
 ### How the diff pane works
 
@@ -1256,7 +1259,9 @@ func verify(_ c: Anchor, against a: Anchor) -> Bool {
 
 ### Check the fix
 
-This arrives in PR 11.
+**Built now:** a thread in "Check the fix" whose newest agent reply has `at:` lines gets a **Show Fix** button. It unfolds the file and any gap hiding the first `at:` range, selects those lines and scrolls to them. Threads with more than 4 messages also fold their middle messages behind "Show N earlier messages", so a long conversation never buries the code under it.
+
+The rest arrives in PR 11:
 
 1. **Find the two revisions.** `rA` is the revision of the review that holds your comment. `rB` is the first revision after the agent's `addressed` reply. Set `fixed_in = rB`.
 2. **Detect "no change".** If the anchor at `rB` is still `current`, the file's `file_patch` is unchanged and the reply has no `at:` lines, show "No change found where the comment was".

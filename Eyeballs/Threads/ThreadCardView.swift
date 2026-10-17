@@ -9,6 +9,8 @@ struct ThreadCardActions {
     var edit: @MainActor (Int) -> Void = { _ in }
     var delete: @MainActor (Int) -> Void = { _ in }
     var deleteThread: @MainActor () -> Void = {}
+    var unfold: @MainActor () -> Void = {}
+    var showFix: @MainActor () -> Void = {}
 }
 
 /// One thread row in the pane: a full card, or one slim line for a resolved thread.
@@ -69,11 +71,22 @@ struct ThreadCard: View {
             if !thread.originalLines.isEmpty {
                 OriginalLines(lines: thread.originalLines)
             }
-            ForEach(Array(thread.comments.enumerated()), id: \.element.id) { index, comment in
+            ForEach(Array(shownComments.enumerated()), id: \.element.id) { index, comment in
                 if index > 0 {
                     Divider().overlay(Color.diffBorder.opacity(0.6)).padding(.leading, 48)
                 }
-                CommentView(comment: comment, isFirst: index == 0, thread: thread, actions: actions)
+                CommentView(comment: comment, isFirst: comment.id == thread.comments.first?.id, thread: thread, actions: actions)
+                if index == 0, content.foldedMessageCount > 0 {
+                    Divider().overlay(Color.diffBorder.opacity(0.6)).padding(.leading, 48)
+                    Button(action: actions.unfold) {
+                        Label("Show \(content.foldedMessageCount) earlier messages", systemImage: "ellipsis.bubble")
+                            .font(.subheadline)
+                    }
+                    .buttonStyle(.borderless)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .padding(.leading, 36)
+                }
             }
             if !content.hasComposerBelow {
                 Divider().overlay(Color.diffBorder)
@@ -89,13 +102,25 @@ struct ThreadCard: View {
         .accessibilityLabel("Thread, \(thread.state.label), \(content.anchorText)")
     }
 
-    /// The thread's one state chip, plus "Outdated" when its lines are gone.
+    /// The first message, then the last two when the middle ones are folded.
+    private var shownComments: [CommentItem] {
+        guard content.foldedMessageCount > 0, let first = thread.comments.first else { return thread.comments }
+        return [first] + thread.comments.suffix(thread.comments.count - 1 - content.foldedMessageCount)
+    }
+
+    /// The lines the agent's newest reply says hold the fix, when it named any.
+    private var fixRange: LineRange? {
+        guard thread.state == .checkTheFix else { return nil }
+        return thread.comments.last { if case .agent = $0.author { true } else { false } }?.fixRanges.first
+    }
+
+    /// The thread's one state chip, plus "Outdated" when its lines changed or are gone.
     private var header: some View {
         HStack(spacing: 8) {
             ThreadStateChip(state: thread.state)
             if thread.isOutdated {
                 Chip(text: "Outdated", symbol: "clock.arrow.circlepath", tint: .gray)
-                    .help("The lines this thread was on are gone. It shows the code it was written on.")
+                    .help("The lines this thread was on changed or are gone. It shows the code it was written on.")
             }
             Text(content.anchorText)
                 .font(.subheadline.monospaced())
@@ -138,6 +163,11 @@ struct ThreadCard: View {
             .help("Reply in this thread (r)")
             .accessibilityLabel("Reply to this thread")
 
+            if let fixRange {
+                Button("Show Fix", action: actions.showFix)
+                    .help("Scroll to \(URL(fileURLWithPath: fixRange.path).lastPathComponent):\(fixRange.start), where the agent says it fixed this")
+                    .accessibilityLabel("Show the fix")
+            }
             if thread.state != .draft {
                 Button(thread.isResolved ? "Reopen" : "Resolve") {
                     actions.setResolved(!thread.isResolved)

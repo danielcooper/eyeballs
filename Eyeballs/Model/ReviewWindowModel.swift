@@ -248,6 +248,8 @@ struct CommentItem: Identifiable, Hashable, Sendable {
     /// True while the comment sits in your unsent review.
     var isPending: Bool
     var isEdited: Bool
+    /// Where an agent's reply says the fix is, from its `at:` lines, on the head side.
+    var fixRanges: [LineRange] = []
 }
 
 enum Author: Hashable, Sendable {

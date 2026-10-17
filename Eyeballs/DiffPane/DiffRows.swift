@@ -181,6 +181,9 @@ struct ThreadRowContent: Equatable {
     var isCollapsed: Bool
     var hasComposerBelow: Bool
     var leadingInset: Double
+    /// Messages folded between the first one and the last two, so a long thread never buries
+    /// the code under it. Zero shows them all.
+    var foldedMessageCount = 0
 }
 
 struct ComposerRowContent: Equatable {
@@ -205,6 +208,8 @@ struct LayerViewState {
     /// Open composers showing their Markdown preview instead of the text.
     var previewingComposers: Set<ComposerKey> = []
     var expandedResolvedThreads: Set<Int> = []
+    /// Threads whose folded middle messages you opened.
+    var unfoldedThreads: Set<Int> = []
     var savedScroll: ScrollAnchor?
 }
 
@@ -480,9 +485,10 @@ struct DiffRowBuilder {
         for thread in threads {
             let composer = attachedComposer(for: thread)
             let isCollapsed = thread.isResolved && !state.expandedResolvedThreads.contains(thread.id) && composer == nil
+            let folded = thread.comments.count > 4 && !state.unfoldedThreads.contains(thread.id) ? thread.comments.count - 3 : 0
             rows.append(.thread(ThreadRowContent(
                 thread: thread, anchorText: Self.anchorText(for: thread.anchor), placementNote: notes[thread.id],
-                isCollapsed: isCollapsed, hasComposerBelow: composer != nil, leadingInset: inset)))
+                isCollapsed: isCollapsed, hasComposerBelow: composer != nil, leadingInset: inset, foldedMessageCount: folded)))
             if let composer {
                 rows.append(.composer(composerContent(for: composer, attachedToCard: true, inset: inset)))
             }

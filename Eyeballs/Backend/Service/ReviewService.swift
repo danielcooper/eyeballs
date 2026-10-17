@@ -40,8 +40,10 @@ final class ReviewService: Sendable {
         observer.withLock { $0 }?.reviewDidChange(change)
     }
 
-    func showWindow(forStack stackID: Int, focus: Bool) {
-        observer.withLock { $0 }?.showWindow(forStack: stackID, focus: focus)
+    /// Brings the window to the front. With `select`, it also switches to `stackID`; without, it
+    /// picks that stack only when nothing is shown yet.
+    func showWindow(forStack stackID: Int?, focus: Bool, select: Bool = false) {
+        observer.withLock { $0 }?.showWindow(forStack: stackID, focus: focus, select: select)
     }
 
     #if DEBUG
@@ -237,7 +239,7 @@ enum ReviewChange: Sendable {
 protocol ReviewServiceObserver: AnyObject, Sendable {
     func reviewDidChange(_ change: ReviewChange)
     /// Brings the window to the front for this stack, taking keyboard focus only when `focus` is true.
-    func showWindow(forStack stackID: Int, focus: Bool)
+    func showWindow(forStack stackID: Int?, focus: Bool, select: Bool)
 }
 
 #if DEBUG

@@ -22,6 +22,12 @@ final class DraftStore {
         drafts[StoredDraftKey(key, stack: stack, layer: layer)] ?? ""
     }
 
+    /// True while you have unsent text for a new comment on lines of this stack. Those lines are
+    /// numbered in the revision you are looking at, so the window must not move to another one.
+    func hasLineDrafts(stack: Int) -> Bool {
+        drafts.keys.contains { $0.stack == stack && $0.kind == "new_thread" && $0.anchor == "lines" }
+    }
+
     /// Saves a draft. Empty text deletes it.
     func set(_ text: String, for key: DraftKey, stack: Int, layer: Int?) {
         let stored = StoredDraftKey(key, stack: stack, layer: layer)

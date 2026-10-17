@@ -1,9 +1,12 @@
 /// `eyeballs threads`: one line per thread.
 public struct ThreadsArguments: Codable, Sendable, Hashable {
     public var filter: ThreadFilter
+    /// Nil means the stack your session drives, else the one holding your folder's branch.
+    public var stack: StackReference?
 
-    public init(filter: ThreadFilter = .open) {
+    public init(filter: ThreadFilter = .open, stack: StackReference? = nil) {
         self.filter = filter
+        self.stack = stack
     }
 }
 

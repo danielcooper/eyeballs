@@ -15,7 +15,8 @@ final class LiveReviewBackend: ReviewBackend, ReviewServiceObserver {
     /// Brings the window to the front, taking keyboard focus when asked.
     var presentWindow: (_ focus: Bool) -> Void = { _ in }
 
-    /// The revision ID you view, by stack ID. The view never moves to a newer one on its own.
+    /// The revision ID you view, by stack ID. It follows the agent's newest revision unless you
+    /// are writing a comment on lines, whose numbers belong to the revision on screen.
     private var viewing: [Int: Int] = [:]
     private var newestRevisions: [Int: ReviewService.NewestRevision] = [:]
     private var content: ReviewService.StackContent?
@@ -154,10 +155,10 @@ final class LiveReviewBackend: ReviewBackend, ReviewServiceObserver {
         Task { @MainActor in self.handle(change) }
     }
 
-    nonisolated func showWindow(forStack stackID: Int, focus: Bool) {
+    nonisolated func showWindow(forStack stackID: Int?, focus: Bool, select: Bool) {
         Task { @MainActor in
             self.enqueue {
-                if self.model.selection == nil,
+                if let stackID, select ? self.model.selection?.stackID != stackID : self.model.selection == nil,
                    let layer = self.model.repositories.lazy.flatMap(\.stacks).first(where: { $0.id == stackID })?.layers.first(where: { $0.position == 1 }) {
                     self.select(LayerSelection(stackID: stackID, layerID: layer.id))
                 }
@@ -173,13 +174,19 @@ final class LiveReviewBackend: ReviewBackend, ReviewServiceObserver {
         case .agentReview(let stackID, let number, let created):
             enqueue {
                 let selected = self.model.selection?.stackID == stackID
-                if !selected { self.viewing[stackID] = nil }
+                let follows = !selected || (created && !self.drafts.hasLineDrafts(stack: stackID))
+                if follows {
+                    self.viewing[stackID] = nil
+                    self.loadedDiff = nil
+                }
                 await self.reload()
                 guard selected else { return }
                 let name = self.content?.agentName ?? "The agent"
                 if !created {
                     self.showBanner(Banner(message: "\(name) ran eyeballs review again, with no new commits since revision \(number).", actionTitle: "OK"),
                                     for: stackID)
+                } else if follows {
+                    self.showBanner(Banner(message: "Now showing revision \(number), with \(name)'s changes.", actionTitle: "OK"), for: stackID)
                 }
             }
         case .listeners(let streams):

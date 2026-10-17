@@ -122,13 +122,24 @@ extension ReviewService {
 
     // MARK: open
 
-    /// `eyeballs open [PATH]`: opens a repo's stack in the window and brings it to the front.
+    /// `eyeballs open [PATH]`: brings the window to the front. With a path, it opens that repo's
+    /// stack; without one, it shows the stack the caller is working on and never adds a stack.
     func open(_ arguments: OpenArguments, client: ClientIdentity) async throws -> (OpenResult, String) {
-        _ = try register(client)
-        let opened = try await openRepository(at: URL(fileURLWithPath: arguments.path, isDirectory: true))
-        showWindow(forStack: opened.stack.id, focus: true)
-        let summary = summary(of: opened.stack, repo: opened.repo)
-        return (OpenResult(repo: summary.repo, stacks: [summary]), "Opened \(stackLabel(opened.stack)) in Eyeballs.")
+        let session = try register(client)
+        if let path = arguments.path {
+            let opened = try await openRepository(at: URL(fileURLWithPath: path, isDirectory: true))
+            showWindow(forStack: opened.stack.id, focus: true, select: true)
+            let summary = summary(of: opened.stack, repo: opened.repo)
+            return (OpenResult(repo: summary.repo, stacks: [summary]), "Opened \(stackLabel(opened.stack)) in Eyeballs.")
+        }
+        guard let stack = try await knownStack(nil, client: client, session: session), let repo = try store.repo(id: stack.repoID) else {
+            showWindow(forStack: nil, focus: true, select: false)
+            return (OpenResult(repo: "", stacks: []),
+                    "Brought Eyeballs to the front. To open a repo it does not know yet, run eyeballs open with the repo's folder.")
+        }
+        showWindow(forStack: stack.id, focus: true, select: true)
+        let summary = summary(of: stack, repo: repo)
+        return (OpenResult(repo: summary.repo, stacks: [summary]), "Showing \(stackLabel(stack)) in Eyeballs.")
     }
 
     // MARK: doctor

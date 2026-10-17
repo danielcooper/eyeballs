@@ -51,6 +51,7 @@ final class UISelfTest {
         await checkJumpFarDown()
         await checkSelectionAcrossThreeRows()
         await checkReloadWithDifferentLayer()
+        await checkSameLayerNewRevision()
         await checkResizeRewraps()
         await checkShortcutsNeedTableFocus()
         await checkReviewLoop()
@@ -269,6 +270,46 @@ final class UISelfTest {
         pasteboard.releaseGlobally()
         record("select_across_3_rows", ["copied_characters": copied?.count ?? 0, "expected_characters": expected.count, "pass": copied == expected])
         pane.clearSelections()
+    }
+
+    /// A newer revision of the layer on screen, as when you press Show Revision: a line whose
+    /// text changed shows its new text, and an added line appears.
+    private func checkSameLayerNewRevision() async {
+        guard let original = model.layer,
+              let fileIndex = original.files.firstIndex(where: { file in file.hunks.contains { $0.lines.contains { $0.newNumber != nil } } }) else {
+            return record("same_layer_new_revision", ["pass": false, "reason": "no file with new-side lines"])
+        }
+        var revised = original
+        var file = revised.files[fileIndex]
+        let hunkIndex = file.hunks.firstIndex { $0.lines.contains { $0.newNumber != nil } }!
+        let lineIndex = file.hunks[hunkIndex].lines.firstIndex { $0.newNumber != nil }!
+        let changedNumber = file.hunks[hunkIndex].lines[lineIndex].newNumber!
+        let changedText = file.hunks[hunkIndex].lines[lineIndex].text + " // revised"
+        file.hunks[hunkIndex].lines[lineIndex].text = changedText
+        let lastNumber = file.hunks[hunkIndex].lines.compactMap(\.newNumber).max()!
+        let addedText = "// added in the newer revision"
+        file.hunks[hunkIndex].lines.append(LineItem(kind: .added, oldNumber: nil, newNumber: lastNumber + 1, text: addedText))
+        file.hunks[hunkIndex].newCount += 1
+        revised.files[fileIndex] = file
+
+        pane.revealFile(file.path)
+        await window.settle()
+        model.layer = revised
+        await window.settle(400)
+        let rowText = { (number: Int) in
+            self.pane.rows.first { $0.code?.path == file.path && $0.code?.line.newNumber == number }?.code?.line.text
+        }
+        let shownText = visibleRows().compactMap { index -> String? in
+            guard let view = table.view(atColumn: 0, row: index, makeIfNecessary: false) as? CodeRowView,
+                  view.content?.path == file.path, view.content?.line.newNumber == changedNumber else { return nil }
+            return view.content?.line.text
+        }.first
+        let pass = rowText(changedNumber) == changedText && rowText(lastNumber + 1) == addedText && (shownText == nil || shownText == changedText)
+        record("same_layer_new_revision", ["changed_row_updated": rowText(changedNumber) == changedText,
+                                           "added_row_present": rowText(lastNumber + 1) == addedText,
+                                           "visible_view_updated": shownText.map { $0 == changedText } ?? true, "pass": pass])
+        model.layer = original
+        await window.settle(400)
     }
 
     private func checkReloadWithDifferentLayer() async {

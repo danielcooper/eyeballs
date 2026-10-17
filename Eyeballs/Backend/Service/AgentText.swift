@@ -285,7 +285,7 @@ struct InboxPacket: Sendable {
     static func location(of thread: InboxThread) -> String {
         guard let path = thread.path else { return "whole layer" }
         if thread.subject == .file { return "\(path) (file)" }
-        guard let start = thread.start, let end = thread.end else { return "\(path) (lines gone)" }
+        guard let start = thread.start, let end = thread.end else { return "\(path) (\(thread.anchor == .gone ? "gone" : "lines changed"))" }
         return "\(path):\(AgentText.range(start, end))"
     }
 
@@ -355,7 +355,9 @@ enum ReplyText {
         }
         if !notes.isEmpty { lines.append("Warning: \(AgentText.list(notes)).") }
 
-        if result.waitingOnYou.isEmpty {
+        if result.waitingOnYou.isEmpty, result.next == .runWaitInBackground {
+            lines.append("Next: nothing changed in the code, so run `eyeballs wait` with run_in_background: true, then end your turn.")
+        } else if result.waitingOnYou.isEmpty {
             lines.append("Next: run `eyeballs review --note \"…\"` so the reviewer sees your fixes.")
         } else {
             let waiting = result.waitingOnYou.map { id in waitingKinds[id].map { "\(id) (\($0.rawValue))" } ?? id.description }
@@ -400,7 +402,7 @@ enum ShowText {
             if let start = shown.start, let end = shown.end {
                 header.append("\(path):\(AgentText.range(start, end))")
             } else {
-                header.append(shown.subject == .file ? "\(path) (file)" : "\(path) (lines gone)")
+                header.append(shown.subject == .file ? "\(path) (file)" : "\(path) (\(shown.anchor == .gone ? "gone" : "lines changed"))")
             }
         } else {
             header.append("whole layer")
@@ -413,7 +415,8 @@ enum ShowText {
         }
         if let original = shown.original, !original.isEmpty {
             lines.append("Originally:")
-            lines += original.map { "       | \($0)" }
+            let start = shown.originalStart ?? 1
+            for (offset, text) in original.enumerated() { lines.append(AgentText.codeLine(start + offset, text)) }
         }
         if !shown.anchors.isEmpty {
             let steps = shown.anchors.map { step -> String in

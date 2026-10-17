@@ -75,9 +75,13 @@ extension DemoState {
         }
 
         var nextComment = 200
-        func comment(_ author: Author, _ body: String, _ date: Date, status: ReplyStatus? = nil, pending: Bool = false, edited: Bool = false) -> CommentItem {
+        func comment(_ author: Author, _ body: String, _ date: Date, status: ReplyStatus? = nil, pending: Bool = false, edited: Bool = false,
+                     fix: ThreadAnchor? = nil) -> CommentItem {
             defer { nextComment += 1 }
-            return CommentItem(id: nextComment, author: author, replyStatus: status, body: body, date: date, isPending: pending, isEdited: edited)
+            var fixRanges: [LineRange] = []
+            if case .lines(let range)? = fix { fixRanges = [range] }
+            return CommentItem(id: nextComment, author: author, replyStatus: status, body: body, date: date, isPending: pending, isEdited: edited,
+                               fixRanges: fixRanges)
         }
 
         let threads = [
@@ -96,6 +100,10 @@ extension DemoState {
             ], isResolved: true),
             DemoThread(id: 41, layerID: 11, anchor: lines("Sources/Models/Order.swift", source.orderNew, "var items: [LineItem]", through: "var total: Money"), comments: [
                 comment(you, "Use `Decimal` for money, not `Double`. Floating point will lose pennies on refunds.", ago(26)),
+                comment(claude, "Should refunds round half-even, like the card network does, or half-up?", ago(9), status: .question),
+                comment(you, "Half-even, please. Finance reconciles against the network's totals.", ago(8)),
+                comment(claude, "Done. `Money.rounded()` uses `.bankers` now, and the refund path calls it once, at the end.", ago(7), status: .addressed),
+                comment(you, "And the basket total?", ago(6)),
                 comment(claude, "Money is a `Decimal` now, wrapped in a `Money` type that carries its currency. Both callers are updated, and `OrderTests.pennyAmountsNeverDrift` covers it.", ago(5), status: .addressed),
             ]),
             DemoThread(id: 42, layerID: 12, anchor: lines("Sources/API/Client.swift", source.clientNew, "var attempt = 0", through: "try await Task.sleep(for: retry.delay"), comments: [
@@ -108,7 +116,7 @@ extension DemoState {
                 ```
 
                 See `Retry.shouldRetry(_:attempt:)`.
-                """, ago(1.5), status: .addressed),
+                """, ago(1.5), status: .addressed, fix: lines("Sources/API/Client.swift", source.clientNew, "catch where retry.shouldRetry")),
             ]),
             DemoThread(id: 43, layerID: 12, anchor: .file(path: "Sources/API/Client.swift"), comments: [
                 comment(you, "Give the retry logic its own type so tests can drive it.", ago(22)),

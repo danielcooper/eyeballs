@@ -47,6 +47,8 @@ public struct ShownThread: Codable, Sendable, Hashable {
     /// The covered lines plus the context lines around them.
     public var code: [CodeLine]
     public var original: [String]?
+    /// The line number of `original`'s first line, in the revision it was written on.
+    public var originalStart: Int?
     /// Every comment, in full, oldest first.
     public var comments: [ShownComment]
     /// Where the thread sat at each revision, such as `r3 40-44 original` then `r4 40-44 current`.
@@ -54,7 +56,7 @@ public struct ShownThread: Codable, Sendable, Hashable {
 
     public init(id: ThreadID, status: ThreadStatus, state: String, subject: ThreadSubject, side: DiffSide?, layer: ThreadLayer,
                 path: String?, start: Int?, end: Int?, commit: String?, anchor: AnchorState, revision: Int, code: [CodeLine],
-                original: [String]?, comments: [ShownComment], anchors: [AnchorStep]) {
+                original: [String]?, originalStart: Int? = nil, comments: [ShownComment], anchors: [AnchorStep]) {
         self.id = id
         self.status = status
         self.state = state
@@ -69,6 +71,7 @@ public struct ShownThread: Codable, Sendable, Hashable {
         self.revision = revision
         self.code = code
         self.original = original
+        self.originalStart = originalStart
         self.comments = comments
         self.anchors = anchors
     }

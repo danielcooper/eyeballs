@@ -64,7 +64,7 @@ extension ReviewService {
         }
         let result = ReplyResult(
             replied: replied, waitingOnYou: waiting.map { ThreadID($0.thread.id) }, warnings: warnings,
-            next: waiting.isEmpty ? .runReview : .replyRemaining)
+            next: waiting.isEmpty ? (replied.contains { $0.status == .addressed } ? .runReview : .runWaitInBackground) : .replyRemaining)
         let kinds = Dictionary(waiting.map { (ThreadID($0.thread.id), $0.kind.wire) }, uniquingKeysWith: { first, _ in first })
         let text = ReplyText.render(result, reviews: reviewIDs.sorted(), waitingKinds: kinds, stackLabels: notDriving.map(stackLabel))
         return (result, text)
@@ -98,8 +98,10 @@ extension ReviewService {
             }
         }
         var original: [String]?
-        if thread.subject == .line, anchor?.startLine == nil, let covered = facts.origin(of: thread)?.coveredText {
+        var originalStart: Int?
+        if thread.subject == .line, anchor?.startLine == nil, let origin = facts.origin(of: thread), let covered = origin.coveredText {
             original = covered.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+            originalStart = origin.startLine
         }
 
         let comments = facts.sentComments(of: thread).map { comment in
@@ -123,7 +125,7 @@ extension ReviewService {
             layer: ThreadLayer(position: layer?.position ?? 0, branch: layer?.branch ?? "", pr: layer?.prNumber, checkout: checkout),
             path: anchor?.path, start: anchor?.startLine, end: anchor?.endLine, commit: snapshot.map { String($0.headSHA.prefix(7)) },
             anchor: Self.shownState(anchor), revision: facts.latestRevision?.number ?? 0, code: code, original: original,
-            comments: comments, anchors: steps)
+            originalStart: originalStart, comments: comments, anchors: steps)
         let result = ShowResult(stack: summary(of: facts.stack, repo: facts.repo), thread: shown)
         return (result, ShowText.render(shown, label: stackLabel(facts.stack)))
     }
@@ -138,7 +140,7 @@ extension ReviewService {
     func threads(_ arguments: ThreadsArguments, client: ClientIdentity) async throws -> (ThreadsResult, String) {
         let session = try register(client)
         var stacks: [StackRecord] = []
-        if let here = try await knownStack(nil, client: client, session: session) {
+        if let here = try await knownStack(arguments.stack, client: client, session: session) {
             stacks = [here]
         } else {
             stacks = try store.activeStacks()

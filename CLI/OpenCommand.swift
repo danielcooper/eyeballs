@@ -5,9 +5,10 @@ import Foundation
 struct OpenCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "open",
-        abstract: "Open a repo in the Eyeballs window, bringing it to the front.")
+        abstract: "Bring the Eyeballs window to the front, or open a repo in it.",
+        discussion: "Without a folder, it shows the stack you are working on and adds nothing. With one, it opens that repo's stack.")
 
-    @Argument(help: "The repo's folder. Defaults to the current folder.")
+    @Argument(help: "A repo's folder, to open its stack in Eyeballs.")
     var path: String?
 
     @OptionGroup var output: OutputOptions
@@ -16,9 +17,9 @@ struct OpenCommand: ParsableCommand {
     func run() throws {
         try reportingErrors(json: output.json) {
             let workingDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
-            let folder = URL(fileURLWithPath: path ?? ".", relativeTo: workingDirectory).standardizedFileURL
+            let folder = path.map { URL(fileURLWithPath: $0, relativeTo: workingDirectory).standardizedFileURL.path }
             let call = AppCall(operation: .open, agent: agent, start: .inFront, timeout: .seconds(30))
-            try call.send(OpenArguments(path: folder.path)).print(json: output.json)
+            try call.send(OpenArguments(path: folder)).print(json: output.json)
         }
     }
 }

@@ -255,8 +255,9 @@ extension ReviewService {
 
     // MARK: Finding a stack Eyeballs knows
 
-    /// The stack a command means: the one it names, else the one holding the branch checked out
-    /// in the caller's folder, else the newest one the caller's session drives.
+    /// The stack a command means: the one it names, else one the caller's session drives (the one
+    /// holding the branch checked out in the caller's folder, if any, else the newest), else the
+    /// one holding that branch.
     func knownStack(_ reference: StackReference?, client: ClientIdentity, session: AgentSessionRecord?) async throws -> StackRecord? {
         switch reference {
         case .id(let id)?:
@@ -272,14 +273,15 @@ extension ReviewService {
             }
             throw EyeballsError(.noStack, "No stack in Eyeballs has that branch as a layer.", hint: "Run eyeballs review to open it.")
         case nil:
+            var stacksHoldingBranch: [StackRecord] = []
             if let repository = try? await repository(at: URL(fileURLWithPath: client.cwd, isDirectory: true)),
                let repo = try store.repo(commonDir: repository.commonDirectory.path),
-               let branch = try? await repository.currentBranch(),
-               let stack = try store.activeStacks(containing: branch, repoID: repo.id).first {
-                return stack
+               let branch = try? await repository.currentBranch() {
+                stacksHoldingBranch = try store.activeStacks(containing: branch, repoID: repo.id)
             }
-            if let session { return try store.stacksDriven(bySession: session.id).first }
-            return nil
+            let driven = try session.map { try store.stacksDriven(bySession: $0.id) } ?? []
+            if let both = driven.first(where: { stack in stacksHoldingBranch.contains { $0.id == stack.id } }) { return both }
+            return driven.first ?? stacksHoldingBranch.first
         }
     }
 }

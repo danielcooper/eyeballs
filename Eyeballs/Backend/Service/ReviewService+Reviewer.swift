@@ -136,7 +136,8 @@ extension ReviewService {
                     ? .agent(name: comment.agentSession.flatMap { facts.sessions[$0] }.flatMap { Self.agentName($0.agent) } ?? "Agent")
                     : .you(name: reviewer.name ?? "You"),
                 replyStatus: comment.replyStatus.flatMap(ReplyStatus.init), body: comment.body, date: comment.sentAt ?? comment.createdAt,
-                isPending: comment.author == .human && comment.sentAt == nil, isEdited: facts.editedCommentIDs.contains(comment.id))
+                isPending: comment.author == .human && comment.sentAt == nil, isEdited: facts.editedCommentIDs.contains(comment.id),
+                fixRanges: (comment.atRanges ?? []).map { LineRange(path: $0.path, side: .head, start: $0.start, end: $0.end) })
         }
         let origin = facts.origin(of: thread)
         let anchorAtRevision = facts.anchor(of: thread, at: revisionID)
@@ -181,7 +182,7 @@ extension ReviewService {
             guard let previous = facts.goodAnchor(before: anchor, of: thread), let line = previous.startLine else { return nil }
             return "Moved from line \(line) in revision \(facts.number(ofRevision: previous.revisionID))"
         case .outdated:
-            return anchor.nearLine.map { "Was near line \($0) in revision \(number)." }
+            return anchor.nearLine.map { "Was near line \($0) in revision \(number)." } ?? "The lines changed in revision \(number)."
         case .gone:
             return anchor.path == nil && thread.subject != .layer
                 ? "Gone: the file was deleted in revision \(number)."

@@ -389,7 +389,39 @@ extension DiffPaneController {
             toggleExpanded: { [weak self] in self?.afterThisEvent { $0.toggleResolvedExpanded(threadID) } },
             edit: { [weak self] commentID in self?.afterThisEvent { $0.openComposer(.edit(commentID: commentID)) } },
             delete: { [weak self] commentID in self?.afterThisEvent { $0.deleteComment(commentID, inThread: threadID) } },
-            deleteThread: { [weak self] in self?.afterThisEvent { $0.deleteThread(threadID) } })
+            deleteThread: { [weak self] in self?.afterThisEvent { $0.deleteThread(threadID) } },
+            unfold: { [weak self] in
+                self?.afterThisEvent { pane in
+                    pane.viewState.unfoldedThreads.insert(threadID)
+                    pane.rebuild()
+                }
+            },
+            showFix: { [weak self] in self?.afterThisEvent { $0.showFix(ofThread: threadID) } })
+    }
+
+    /// Scrolls to the lines the agent's newest reply names with `at:`, unfolding the file and
+    /// any gap that hides them, and selects them so they stand out.
+    func showFix(ofThread threadID: Int) {
+        guard let thread = model.layer?.threads.first(where: { $0.id == threadID }),
+              let range = thread.comments.last(where: { if case .agent = $0.author { true } else { false } })?.fixRanges.first,
+              let file = model.layer?.files.first(where: { $0.path == range.path }) else { return }
+        var state = viewState
+        state.collapsedFiles.remove(file.path)
+        state.loadedBigFiles.insert(file.path)
+        for (index, hunk) in file.hunks.enumerated() {
+            let gapStart = index == 0 ? 1 : file.hunks[index - 1].newStart + file.hunks[index - 1].newCount
+            if (gapStart..<hunk.newStart).contains(range.start) { state.expandedGaps.insert(GapID(path: file.path, index: index)) }
+        }
+        if let last = file.hunks.last, range.start >= last.newStart + last.newCount {
+            state.expandedGaps.insert(GapID(path: file.path, index: file.hunks.count))
+        }
+        viewState = state
+        rebuild()
+        guard let row = rows.firstIndex(where: { $0.code?.path == range.path && $0.code?.line.newNumber == range.start }) else { return }
+        textSelection = nil
+        lineSelection = LineSelection(path: range.path, side: .head, anchorLine: range.start, headLine: range.end)
+        jump(toRow: row, leavingAbove: 2 * metrics.lineHeight)
+        redrawVisibleCodeRows()
     }
 
     func overviewActions() -> OverviewActions {

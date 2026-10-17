@@ -1,14 +1,15 @@
 /// `eyeballs open [PATH]`: you open a repo in the window.
 public struct OpenArguments: Codable, Sendable, Hashable, ValidatedArguments {
     /// An absolute path. The command resolves a relative one against its working directory.
-    public var path: String
+    /// Nil means "show the stack I am working on", which never adds a stack.
+    public var path: String?
 
-    public init(path: String) {
+    public init(path: String?) {
         self.path = path
     }
 
     public func validate() throws {
-        guard path.hasPrefix("/") else { throw EyeballsError.badInput("The path to open must be absolute.") }
+        guard path?.hasPrefix("/") ?? true else { throw EyeballsError.badInput("The path to open must be absolute.") }
     }
 }
 

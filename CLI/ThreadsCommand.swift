@@ -21,13 +21,21 @@ struct ThreadsCommand: ParsableCommand {
     @Flag(exclusivity: .exclusive)
     var filter: Filter = .open
 
+    @Option(help: "Show only this stack: its ID, such as s3, or any branch in it.")
+    var stack: String?
+
     @OptionGroup var output: OutputOptions
     @OptionGroup var agent: AgentOptions
+
+    func validate() throws {
+        _ = try validatedStack(stack)
+    }
 
     func run() throws {
         try reportingErrors(json: output.json) {
             let call = AppCall(operation: .threads, agent: agent, start: .never, timeout: .seconds(30))
-            try call.send(ThreadsArguments(filter: ThreadFilter(rawValue: filter.rawValue))).print(json: output.json)
+            let arguments = ThreadsArguments(filter: ThreadFilter(rawValue: filter.rawValue), stack: try validatedStack(stack))
+            try call.send(arguments).print(json: output.json)
         }
     }
 }
