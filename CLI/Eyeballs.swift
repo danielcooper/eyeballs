@@ -8,7 +8,10 @@ struct Eyeballs: ParsableCommand {
         commandName: "eyeballs",
         abstract: "Open your stack in Eyeballs for review, and act on the comments.",
         version: versionLine,
-        subcommands: [
+        subcommands: subcommands)
+
+    private static var subcommands: [any ParsableCommand.Type] {
+        var commands: [any ParsableCommand.Type] = [
             ReviewCommand.self,
             WaitCommand.self,
             InboxCommand.self,
@@ -21,7 +24,12 @@ struct Eyeballs: ParsableCommand {
             HookCommand.self,
             OpenCommand.self,
             DoctorCommand.self,
-        ])
+        ]
+        #if DEBUG
+        commands += [DebugSubmitReviewCommand.self, DebugSnapshotWindowCommand.self]
+        #endif
+        return commands
+    }
 
     /// For example `eyeballs 0.1.0 (42) protocol 1`.
     static var versionLine: String {
