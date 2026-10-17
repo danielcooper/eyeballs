@@ -3,6 +3,7 @@
 # a Debug-only operation as the reviewer. It checks every output and exit code.
 #
 # Usage: Scripts/fake-agent.sh [path/to/Debug/Eyeballs.app]
+# Set FAKE_AGENT_SNAPSHOTS to a folder to save a picture of the window at each stage.
 #
 # It builds a two-branch stack in a temporary repo, starts the app with its own temporary
 # EYEBALLS_HOME, and quits the app when it finishes. The app's window appears while it runs.
@@ -88,6 +89,13 @@ line() {
 last_line() {
   checks=$((checks + 1))
   [ "$(printf '%s\n' "$out" | tail -n 1)" = "$1" ] || fail "expected the last line to be: $1"
+}
+
+# snapshot NAME: saves the window as NAME.png when FAKE_AGENT_SNAPSHOTS names a folder.
+snapshot() {
+  [ -n "${FAKE_AGENT_SNAPSHOTS:-}" ] || return 0
+  sleep 1
+  run 0 "$cli" debug-snapshot-window --to "$FAKE_AGENT_SNAPSHOTS/$1.png"
 }
 
 git_quiet() {
@@ -176,6 +184,7 @@ run 0 "$cli" status --brief
 line 1 "Eyeballs: you drive b (s1) at r1. Nothing waits on you. Listening: wait."
 run 0 "$cli" debug-submit-review --path a.txt --line 21 --end-line 22 --body "Why add these two lines?" --summary "Close, one question."
 line 1 "Submitted review 1 on b (s1) with t1."
+snapshot 1-submitted
 wait_for_output "$work/wait1.out"
 out="$(cat "$work/wait1.out")"
 err=""
@@ -232,6 +241,7 @@ The two lines are needed. I added a note at the top of the file.
 EOF"
 line 1 "Sent 1 reply on review 1: 1 addressed."
 line 2 'Next: run `eyeballs review --note "…"` so the reviewer sees your fixes.'
+snapshot 2-replied
 run 0 "$cli" threads
 line 1 "t1  a  a.txt:21-22  waiting on Alex (you: addressed)"
 
@@ -246,6 +256,7 @@ line 1 "Opened b (s1) r2 in Eyeballs: 2 layers, 2 files, +5 -0."
 line 2 "Threads carried over: 1 moved."
 line 3 "Waiting on Alex: 1 thread. Waiting on you: 0."
 last_line 'Next: run `eyeballs wait` with run_in_background: true, then end your turn.'
+snapshot 3-revision-2
 
 run 0 "$cli" show t1
 line 1 "t1 · Check the fix · layer 1 a · a.txt:23-24 · r2 moved"
