@@ -1,0 +1,17 @@
+#!/bin/sh
+for candidate in \
+  "${EYEBALLS_CLI:-}" \
+  "$HOME/.local/bin/eyeballs" \
+  "/Applications/Eyeballs.app/Contents/Helpers/eyeballs" \
+  "$HOME/Applications/Eyeballs.app/Contents/Helpers/eyeballs"
+do
+  [ -n "$candidate" ] && [ -x "$candidate" ] && exec "$candidate" "$@"
+done
+case "$1" in
+  hook) exit 0 ;;
+  status) echo "Eyeballs: not installed."; exit 0 ;;
+  # A monitor that exits sends Claude a notification, so it sleeps instead.
+  watch) exec tail -f /dev/null ;;
+esac
+echo "eyeballs: Eyeballs.app isn't installed. Get it from https://github.com/danielcooper/eyeballs/releases, then choose Eyeballs > Install Command Line Tool." >&2
+exit 69

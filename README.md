@@ -8,18 +8,27 @@ When an agent builds a stack of pull requests, you want to read it and leave it 
 
 ## Status
 
-Eyeballs is at an early stage. The whole review loop works from a terminal. The Claude Code plugin, which wakes the agent for you, comes next. The plan is in [the design document](docs/design.md).
+Eyeballs is at an early stage, but the whole review loop works, and a Claude Code plugin teaches the agent the loop and wakes it when you send a review. The plan is in [the design document](docs/design.md).
 
-## Trying the loop
+## Use it with Claude Code
 
 1. **Install the command.** Open Eyeballs, then choose **Eyeballs → Install Command Line Tool…**. It links `~/.local/bin/eyeballs` to the command inside the app.
-2. **The agent opens a review.** With its stack committed, the agent runs `eyeballs review` in your repository, then `eyeballs wait` in the background.
-3. **You review.** Comment in the window, then choose **Finish review**.
-4. **The agent replies.** It runs `eyeballs inbox`, fixes the code, answers every thread with `eyeballs reply --file -`, and runs `eyeballs review` again.
+2. **Install the plugin.** In Claude Code 2.1.275 or later, run `/plugin install eyeballs --marketplace danielcooper/eyeballs`. On older versions, run `claude plugin marketplace add danielcooper/eyeballs`, then `claude plugin install eyeballs@eyeballs`. From a local clone, pass the clone's folder to `marketplace add` instead.
+3. **Let agents run the command.** Add `"Bash(eyeballs *)"` to `permissions.allow` in `~/.claude/settings.json`, so the agent can run `eyeballs` without asking you each time. `eyeballs doctor` prints the line.
+4. **Ask for a review.** With its stack committed, tell the agent to open it in Eyeballs, or run `/eyeballs:review`.
+
+Then the loop runs by itself:
+
+1. **The agent opens a review.** It runs `eyeballs review`, then waits in the background.
+2. **You review.** Comment in the window, then choose **Finish review**.
+3. **The agent wakes up.** Its background wait, the plugin's monitor or its Stop hook tells it a review is waiting. It reads your comments with `eyeballs inbox`.
+4. **The agent replies.** It fixes the code, answers every thread with `eyeballs reply --file -`, and runs `eyeballs review` again. The window moves to the new revision.
+
+The plugin adds a `review` skill, hooks that start a session with its Eyeballs status and stop the agent from finishing while your comments wait, and a monitor that starts once the skill runs. Its hooks do nothing until Eyeballs is installed and the session has a review open.
 
 `Scripts/fake-agent.sh` runs the same loop against a Debug build, with the script playing the agent and checking every answer.
 
-## How it will work
+## How it works
 
 1. **The agent opens a review.** When its stack is committed, the agent runs `eyeballs review`. Eyeballs reads the stack from [gh-stack](https://github.com/github/gh-stack) and shows each layer's own diff.
 2. **You comment.** Comment on a line, a range, a file or a whole layer, then submit the review.

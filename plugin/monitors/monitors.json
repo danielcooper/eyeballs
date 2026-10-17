@@ -1,0 +1,8 @@
+[
+  {
+    "name": "eyeballs",
+    "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/eyeballs watch",
+    "description": "Tells Claude when the reviewer submits an Eyeballs review or answers a question.",
+    "when": "on-skill-invoke:review"
+  }
+]

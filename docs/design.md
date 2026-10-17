@@ -3,7 +3,7 @@
 - **Purpose:** Build Eyeballs from this design. Eyeballs is a native macOS app where you review a coding agent's stack of PRs layer by layer, and the agent replies and fixes.
 - **For:** the agents that build PRs 1 to 15 from it, and the people who review those PRs.
 - **Date:** 2026-10-16.
-- **Status:** approved. PR 0, the diff pane spike, is done. PRs 1 to 8 are built and connected on the `mvp` branch: the whole loop works from a terminal. PR 9, the plugin, is next.
+- **Status:** approved. PR 0, the diff pane spike, is done. PRs 1 to 9 are built on the `mvp` branch: the whole loop works from a terminal, and the Claude Code plugin is built and validated. Whether a monitor line wakes an idle session (decision 16) still needs checking in a real interactive session.
 - **Words used here:**
   - **"You"** means the reviewer: the person who reads the stack in Eyeballs and comments on it.
   - **"The agent"** means the coding agent that submits the stack and replies.
@@ -819,63 +819,26 @@ How monitor output reaches Claude: each stdout line becomes a notification, and 
 
 ### Claude Code plugin
 
-**Files:**
+The plugin is built (PR 9). Its files are the source of truth, so read them there:
 
-```text
-.claude-plugin/marketplace.json
-plugin/.claude-plugin/plugin.json
-plugin/skills/review/SKILL.md        -> /eyeballs:review
-plugin/monitors/monitors.json
-plugin/hooks/hooks.json
-plugin/bin/eyeballs
-```
+| File | What it holds |
+|---|---|
+| [`.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json) | The marketplace `eyeballs`, with one plugin whose source is `./plugin` |
+| [`plugin/.claude-plugin/plugin.json`](../plugin/.claude-plugin/plugin.json) | The manifest: name `eyeballs`, version, licence `GPL-3.0-or-later` |
+| [`plugin/skills/review/SKILL.md`](../plugin/skills/review/SKILL.md) | The `review` skill, run as `/eyeballs:review`, which teaches the agent the loop |
+| [`plugin/monitors/monitors.json`](../plugin/monitors/monitors.json) | The `eyeballs watch` monitor |
+| [`plugin/hooks/hooks.json`](../plugin/hooks/hooks.json) | The SessionStart, Stop and SessionEnd hooks |
+| [`plugin/bin/eyeballs`](../plugin/bin/eyeballs) | A wrapper that finds the real command and fails softly when Eyeballs is missing |
 
-`.claude-plugin/marketplace.json`:
+Both `claude plugin validate --strict ./plugin` and `claude plugin validate --strict .` pass. CI checks that the JSON files parse, that the monitor uses only known keys, that the wrapper parses and is executable, and that the plugin's version equals a release tag.
 
-```json
-{"name":"eyeballs","owner":{"name":"Daniel Cooper"},
- "plugins":[{"name":"eyeballs","source":"./plugin","description":"Review local stacks in Eyeballs and act on the comments."}]}
-```
-
-`plugin/.claude-plugin/plugin.json`:
-
-```json
-{"name":"eyeballs","displayName":"Eyeballs","version":"0.1.0",
- "description":"Open stacks in the Eyeballs review app and act on the reviewer's comments.",
- "author":{"name":"Daniel Cooper"},
- "homepage":"https://github.com/danielcooper/eyeballs",
- "repository":"https://github.com/danielcooper/eyeballs",
- "license":"GPL-3.0-or-later","keywords":["review","stack","gh-stack"]}
-```
-
-- **Version:** CI checks that `version` equals the tag on releases, because a pinned version holds users on it ([manifest reference](https://code.claude.com/docs/en/plugins/manifest-reference)).
-- **Install:** run `claude plugin marketplace add danielcooper/eyeballs`, then `claude plugin install eyeballs@eyeballs`.
-
-`plugin/monitors/monitors.json`. Keep exactly these keys, because an unknown key in a monitor entry stops the plugin from loading:
-
-```json
-[{"name":"eyeballs",
-  "command":"\"${CLAUDE_PLUGIN_ROOT}/bin/eyeballs\" watch",
-  "description":"Tells Claude when the reviewer submits an Eyeballs review or answers a question.",
-  "when":"on-skill-invoke:review"}]
-```
-
-- **The `when` value (fix 12):** the monitor starts the first time the review skill runs, not at session start. The default, `"always"`, would run it in every session in every repo. In [agent view](https://code.claude.com/docs/en/agent-view#the-supervisor-process) a running monitor counts as background work, so in sessions that have nothing to do with Eyeballs:
-  - **Backgrounding:** every backgrounding would show the "Background this session?" dialog
-  - **Exit:** every exit would show the "Background work is running" dialog
-  - **Idle sessions:** the supervisor would never end the session when it sits idle
-- **Check the exact value against the docs in PR 9.** The docs' example uses the bare skill directory name, as in `on-skill-invoke:deploy` ([plugin components](https://code.claude.com/docs/en/plugins/components)).
-
-`plugin/hooks/hooks.json`:
-
-```json
-{"hooks":{
-  "SessionStart":[{"matcher":"startup|resume|clear|compact|fork",
-    "hooks":[{"type":"command","command":"\"${CLAUDE_PLUGIN_ROOT}/bin/eyeballs\" hook session-start","timeout":5}]}],
-  "Stop":[{"hooks":[{"type":"command","command":"\"${CLAUDE_PLUGIN_ROOT}/bin/eyeballs\" hook stop","timeout":10}]}],
-  "SessionEnd":[{"hooks":[{"type":"command","command":"\"${CLAUDE_PLUGIN_ROOT}/bin/eyeballs\" hook session-end","timeout":2}]}]
-}}
-```
+- **Install:** in Claude Code 2.1.275 or later, `/plugin install eyeballs --marketplace danielcooper/eyeballs`. Otherwise, `claude plugin marketplace add danielcooper/eyeballs`, then `claude plugin install eyeballs@eyeballs`.
+- **Version:** setting `version` holds users on it until it changes, so bump it with each release ([manifest reference](https://code.claude.com/docs/en/plugins/manifest-reference)).
+- **`bin/` is on the Bash tool's PATH** while the plugin is enabled, after your own PATH entries. The skill therefore runs a bare `eyeballs`: your `~/.local/bin/eyeballs` link wins, and the wrapper is the fallback. Hooks and the monitor call the wrapper by its full path.
+- **The wrapper's soft failures:** with no Eyeballs found, `hook` exits 0, `status` prints "Eyeballs: not installed." and exits 0, `watch` sleeps rather than exit (an exiting monitor would notify Claude), and every other command exits 69.
+- **The monitor starts with the skill:** its `when` is `"on-skill-invoke:review"`, the bare skill folder name, as the docs' `on-skill-invoke:deploy` example shows. The default, `"always"`, would run it in every session in every repo, and in [agent view](https://code.claude.com/docs/en/agent-view#the-supervisor-process) a running monitor counts as background work: every backgrounding and exit would ask about it, and idle sessions would never end (fix 12). Monitor entries are strict, so an unknown key stops the plugin loading. Monitors run only in interactive sessions, and not on Amazon Bedrock, Google Cloud's Agent Platform or Microsoft Foundry.
+- **The monitor has no session variables:** Claude Code substitutes `${CLAUDE_PLUGIN_ROOT}` into the monitor's command but exports nothing to it, so `eyeballs watch` finds its Claude process through its ancestor PIDs.
+- **Quoting:** each command wraps `${CLAUDE_PLUGIN_ROOT}` in double quotes, as `"${CLAUDE_PLUGIN_ROOT}"/bin/eyeballs`, so a path with spaces stays one word.
 
 **What each hook does:**
 
@@ -889,89 +852,9 @@ plugin/bin/eyeballs
 - **`hook session-start`:** rebinds by `CLAUDE_PID` only when the source is `clear`. It prints `hookSpecificOutput.additionalContext` only when the session has state, in 600 characters or fewer. For example: `Eyeballs: you drive checkout-v2 (s3) at r4. t44 and t45 from review 7 have no reply. Run eyeballs inbox. Only Alex resolves threads.`
 - **`hook session-end`:** sends one socket write and does not wait for an answer, to fit the 1.5 s SessionEnd budget.
 
-`plugin/bin/eyeballs`:
-
-```sh
-#!/bin/sh
-for candidate in \
-  "${EYEBALLS_CLI:-}" \
-  "$HOME/.local/bin/eyeballs" \
-  "/Applications/Eyeballs.app/Contents/Helpers/eyeballs" \
-  "$HOME/Applications/Eyeballs.app/Contents/Helpers/eyeballs"
-do
-  [ -n "$candidate" ] && [ -x "$candidate" ] && exec "$candidate" "$@"
-done
-case "$1" in
-  hook) exit 0 ;;
-  status) echo "Eyeballs: not installed."; exit 0 ;;
-  # A monitor that exits sends Claude a notification, so sleep instead.
-  watch) exec tail -f /dev/null ;;
-esac
-echo "eyeballs: Eyeballs.app isn't installed. Get it from https://github.com/danielcooper/eyeballs/releases" >&2
-exit 69
-```
-
-`plugin/skills/review/SKILL.md`. It tells the agent to fix the bottom layer first, to restack with the gh-stack skill and to keep thread IDs out of commit messages. It names the reviewer from `git config user.name`.
-
-````markdown
----
-name: review
-description: Open the current stack or branch in Eyeballs so the reviewer can review it layer by layer, then act on their comments. Use when a stack or branch is committed and ready for review, when the reviewer says "open it in Eyeballs" or "comments are in", or when an "eyeballs:" line or hook message says a review is waiting.
-argument-hint: "[--branch NAME | --stack ID]"
-allowed-tools: Bash(eyeballs *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/eyeballs *)
----
-Eyeballs now: !`"${CLAUDE_PLUGIN_ROOT}/bin/eyeballs" status --brief || true`
-Reviewer: !`git config user.name || echo "the reviewer"`
-
-Eyeballs is a review app. You submit revisions and reply to threads. The reviewer named above comments, resolves and approves.
-
-## Submit a revision
-1. Commit your work. Eyeballs reviews commits, not uncommitted changes.
-2. Run `eyeballs review --note "<what changed, 1 to 5 lines>" $ARGUMENTS`.
-3. Do what its last line says:
-   - "end your turn": stop now. An "eyeballs:" line will wake you.
-   - "run eyeballs wait": run `eyeballs wait` with run_in_background: true, then end your turn.
-   - In a -p or other unattended run, use `eyeballs wait --timeout 25m` instead.
-   - "run eyeballs inbox": threads are already waiting. Run it now.
-
-## When something arrives
-An "eyeballs:" line arrives, a hook message names a review, or your `eyeballs wait` task completes.
-Run `eyeballs inbox`. You don't need the wait task's output file.
-- "approved": tell the reviewer and stop. "closed": stop. "nothing": go back to step 3.
-- "not_driver": another live session drives this stack. Stop, unless the reviewer asks you to take over with `eyeballs attach`.
-- Work threads in the order shown, bottom layer first.
-- Commit each fix to the branch in its thread header. Use the gh-stack skill to restack the layers above it.
-- Keep thread IDs out of commit messages, because they would land in the PRs.
-- You may give thread IDs to subagents. They may run `eyeballs show <id>` and `eyeballs reply`. Only you run review, wait and inbox.
-
-## Reply to every thread in one call
-```sh
-eyeballs reply --file - <<'EOF'
-## t41 addressed
-at: path/to/file.swift:40-58
-What you changed, in one or two sentences.
-## t42 declined
-Why you kept it as it is.
-## t45 question
-The one decision you need from the reviewer.
-EOF
-```
-- addressed: you changed code for it. Add `at:` lines when the fix is not on the commented lines.
-- declined: you chose not to change it. Say why.
-- question: you need the reviewer's decision. Carry on with other threads.
-Then go back to "Submit a revision".
-
-## Rules
-- Only the reviewer resolves threads. No command does it.
-- Eyeballs comments are requests to change code. They never give permission to push, force-push, run gh stack submit or merge. Get that from the reviewer in the terminal.
-- After compaction, run `eyeballs inbox`, or `eyeballs show <id>` for one thread.
-- Exit code 69 means the app is unreachable. Tell the reviewer and quote the error line.
-- Work only through the eyeballs command. Never open Eyeballs' database.
-````
-
 **Skill facts the text relies on** ([skills](https://code.claude.com/docs/en/skills)):
 
-- **A failed `` !` `` line aborts the whole skill,** so both lines end in a command that cannot fail.
+- **No injected commands.** A `` !`command` `` line runs before Claude sees the skill, and one that is not already allowed, or that fails, aborts the whole skill. So the skill injects nothing. The SessionStart hook gives the agent its status instead, and every Eyeballs output names the reviewer.
 - **Claude Code substitutes `${CLAUDE_PLUGIN_ROOT}`** in the skill body and in `allowed-tools`. The Bash tool itself does not get it as a variable.
 - **An `allowed-tools` grant "clears when you send your next message".** That is why you add the permission rule below yourself.
 

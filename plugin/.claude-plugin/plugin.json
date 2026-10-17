@@ -1,0 +1,11 @@
+{
+  "name": "eyeballs",
+  "displayName": "Eyeballs",
+  "version": "0.1.0",
+  "description": "Open stacks in the Eyeballs review app and act on the reviewer's comments.",
+  "author": { "name": "Daniel Cooper" },
+  "homepage": "https://github.com/danielcooper/eyeballs",
+  "repository": "https://github.com/danielcooper/eyeballs",
+  "license": "GPL-3.0-or-later",
+  "keywords": ["review", "stack", "gh-stack"]
+}

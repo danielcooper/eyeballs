@@ -1,0 +1,12 @@
+{
+  "name": "eyeballs",
+  "owner": { "name": "Daniel Cooper" },
+  "description": "Eyeballs: review your coding agent's stack layer by layer in a native Mac window, and let the agent act on your comments.",
+  "plugins": [
+    {
+      "name": "eyeballs",
+      "source": "./plugin",
+      "description": "Open stacks in the Eyeballs review app and act on the reviewer's comments."
+    }
+  ]
+}

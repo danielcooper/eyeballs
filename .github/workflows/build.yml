@@ -23,6 +23,19 @@ jobs:
       - name: Test core package
         run: swift test --package-path Packages/EyeballsCore
 
+      - name: Check plugin files
+        run: |
+          for f in .claude-plugin/marketplace.json plugin/.claude-plugin/plugin.json \
+                   plugin/hooks/hooks.json plugin/monitors/monitors.json; do
+            jq -e . "$f" > /dev/null
+          done
+          jq -e 'all(.[]; (keys - ["name","command","description","when"]) == [])' plugin/monitors/monitors.json
+          test -x plugin/bin/eyeballs
+          sh -n plugin/bin/eyeballs
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            test "$(jq -r .version plugin/.claude-plugin/plugin.json)" = "${GITHUB_REF_NAME#v}"
+          fi
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
