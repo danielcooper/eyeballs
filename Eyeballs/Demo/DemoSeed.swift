@@ -88,7 +88,7 @@ extension DemoState {
             DemoThread(id: 39, layerID: 12, anchor: .file(path: "Sources/API/Endpoints.swift"), comments: [
                 comment(you, "These two paths disagree on the plural. Pick one.", ago(22)),
                 comment(claude, "Both use `/v1/orders` now, built from one `version` constant. The singular route is gone.", ago(3), status: .addressed),
-            ], anchorNote: "Outdated: the lines this thread was on are gone. They were near line 8 in r3.",
+            ], anchorNote: "Was near line 8 in revision 3.",
                originalLines: ["    static func order(_ id: String) -> String {", "        \"/v1/order/\\(id)\"", "    }"]),
             DemoThread(id: 40, layerID: 11, anchor: lines("Sources/Models/Money.swift", source.money, "static func < "), comments: [
                 comment(you, "Should `Money` be `Comparable`? The basket sorts by price.", ago(26)),

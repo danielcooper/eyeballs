@@ -210,8 +210,9 @@ struct ThreadItem: Identifiable, Hashable, Sendable {
     var comments: [CommentItem]
     var isResolved: Bool
     var state: ThreadState
-    /// Said in words when the thread moved since it was written, for example
-    /// "Moved from line 98 (r3)" or "Outdated: the lines this thread was on are gone".
+    /// Said in words when the thread moved since it was written, for example "Moved from line 98
+    /// in revision 3". For an outdated thread it says where the lines were, such as "Was near
+    /// line 8 in revision 3."; the card's Outdated chip already says that they are gone.
     var anchorNote: String?
     /// The original lines, shown when the thread is outdated.
     var originalLines: [String]

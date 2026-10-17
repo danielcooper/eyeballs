@@ -60,7 +60,11 @@ struct ThreadCard: View {
                 NoteLine(text: note, symbol: "info.circle", tint: .secondary)
             }
             if let note = thread.anchorNote {
-                NoteLine(text: note, symbol: thread.originalLines.isEmpty ? "arrow.turn.down.right" : "exclamationmark.triangle.fill", tint: .orange)
+                if thread.isOutdated {
+                    NoteLine(text: note, symbol: nil, tint: .secondary)
+                } else {
+                    NoteLine(text: note, symbol: "arrow.turn.down.right", tint: .orange)
+                }
             }
             if !thread.originalLines.isEmpty {
                 OriginalLines(lines: thread.originalLines)
@@ -82,7 +86,7 @@ struct ThreadCard: View {
         .contentShape(shape)
         .simultaneousGesture(TapGesture().onEnded { actions.focus() })
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Thread t\(thread.id), \(thread.state.label), \(content.anchorText)")
+        .accessibilityLabel("Thread, \(thread.state.label), \(content.anchorText)")
     }
 
     /// The thread's one state chip, plus "Outdated" when its lines are gone.
@@ -100,9 +104,6 @@ struct ThreadCard: View {
                 .fixedSize()
                 .layoutPriority(1)
             Spacer(minLength: 8)
-            Text("t\(thread.id)")
-                .font(.subheadline.monospaced())
-                .foregroundStyle(.tertiary)
             if thread.isResolved {
                 Button(action: actions.toggleExpanded) {
                     Image(systemName: "chevron.up")
@@ -135,14 +136,14 @@ struct ThreadCard: View {
             }
             .buttonStyle(.plain)
             .help("Reply in this thread (r)")
-            .accessibilityLabel("Reply to thread t\(thread.id)")
+            .accessibilityLabel("Reply to this thread")
 
             if thread.state != .draft {
                 Button(thread.isResolved ? "Reopen" : "Resolve") {
                     actions.setResolved(!thread.isResolved)
                 }
                 .help(thread.isResolved ? "Open this thread again (e)" : "Mark this thread resolved (e)")
-                .accessibilityLabel(thread.isResolved ? "Reopen thread t\(thread.id)" : "Resolve thread t\(thread.id)")
+                .accessibilityLabel(thread.isResolved ? "Reopen this thread" : "Resolve this thread")
             }
         }
         .padding(.horizontal, 12)
@@ -187,8 +188,8 @@ struct CommentView: View {
                             .help("In your review. The agent sees it when you submit.")
                     }
                     Spacer(minLength: 0)
-                    if !comment.author.isAgent {
-                        Menu {
+                    Menu {
+                        if !comment.author.isAgent {
                             Button("Edit") { actions.edit(comment.id) }
                             Divider()
                             if deletesThread {
@@ -196,17 +197,19 @@ struct CommentView: View {
                             } else {
                                 Button(deleteTitle, role: .destructive) { actions.delete(comment.id) }
                             }
-                        } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.callout.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 24, height: 16)
+                            Divider()
                         }
-                        .menuStyle(.borderlessButton)
-                        .menuIndicator(.hidden)
-                        .fixedSize()
-                        .accessibilityLabel("More actions for this comment")
+                        Button("Copy Thread ID", action: copyThreadID)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 24, height: 16)
                     }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .accessibilityLabel("More actions for this comment")
                 }
                 MarkdownText(comment.body)
             }
@@ -214,6 +217,12 @@ struct CommentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 12)
         .accessibilityElement(children: .contain)
+    }
+
+    /// The ID the agent uses for this thread, such as `t44`, for when you talk to it elsewhere.
+    private func copyThreadID() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("t\(thread.id)", forType: .string)
     }
 
     /// The first comment opens the thread, so deleting it deletes the thread.
@@ -227,14 +236,16 @@ struct CommentView: View {
 
 struct NoteLine: View {
     let text: String
-    let symbol: String
+    let symbol: String?
     let tint: Color
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: symbol)
-                .font(.subheadline)
-                .foregroundStyle(tint)
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.subheadline)
+                    .foregroundStyle(tint)
+            }
             Text(text)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -290,10 +301,6 @@ struct ResolvedThreadBar: View {
                 Text("Resolved")
                     .fontWeight(.semibold)
                 Text("·").foregroundStyle(.tertiary)
-                Text("t\(content.thread.id)")
-                    .font(.callout.monospaced())
-                    .foregroundStyle(.secondary)
-                Text("·").foregroundStyle(.tertiary)
                 Text(MarkdownText.attributed(firstWords))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -312,6 +319,6 @@ struct ResolvedThreadBar: View {
         }
         .buttonStyle(.plain)
         .help("Show this resolved thread")
-        .accessibilityLabel("Resolved thread t\(content.thread.id): \(String(MarkdownText.attributed(firstWords).characters)). Show it.")
+        .accessibilityLabel("Resolved thread: \(String(MarkdownText.attributed(firstWords).characters)). Show it.")
     }
 }
