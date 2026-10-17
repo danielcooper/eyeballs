@@ -62,20 +62,12 @@ struct DetailColumn: View {
                     description: Text("Choose a layer of a stack in the sidebar to see its changes."))
             }
         } else if model.layer == nil {
-            placeholder {
-                if model.isLoadingLayer {
-                    ProgressView("Loading layer…").controlSize(.large)
-                } else {
+            if model.isLoadingLayer {
+                placeholder { LoadingDiff() }
+            } else {
+                placeholder {
                     ContentUnavailableView("This layer isn't loaded", systemImage: "exclamationmark.triangle",
                                            description: Text("Pick it again in the sidebar to retry."))
-                }
-            }
-        } else if let layer = model.layer, layer.files.isEmpty, layer.threads.isEmpty {
-            placeholder {
-                ContentUnavailableView {
-                    Label("No changes in this layer", systemImage: "checkmark.circle")
-                } description: {
-                    Text(noChangesDescription)
                 }
             }
         } else if model.isLoadingLayer {
@@ -94,15 +86,54 @@ struct DetailColumn: View {
         }
     }
 
-    private var noChangesDescription: String {
-        guard let layer = model.selectedLayer else { return "There is nothing to review here." }
-        return "\(layer.branch) has no commits of its own yet, so there is nothing to review here."
-    }
-
     private func placeholder<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         content()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.paneBackground)
+    }
+}
+
+/// Grey stand-ins for the diff while a layer loads, drawn like the file list's stand-ins, so the
+/// two columns show one loading state.
+private struct LoadingDiff: View {
+    private static let lineLengths = [28, 44, 36, 52, 20, 0, 40, 60, 32, 48, 24, 0, 36, 56, 44, 28]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("LAYER 2 OF 3")
+                    .font(.subheadline.weight(.semibold))
+                Text("placeholder-layer")
+                    .font(.title3.weight(.semibold))
+                Text("Builds on placeholder")
+                    .font(.callout)
+            }
+            .padding(16)
+            HStack {
+                Text("Sources/Placeholder/File.swift  +24 −6")
+                    .font(.callout.monospaced())
+                Spacer()
+            }
+            .padding(.horizontal, 52)
+            .frame(height: FileHeaderView.height)
+            .background(Color(nsColor: DiffColors.fileHeader))
+            ForEach(Array(Self.lineLengths.enumerated()), id: \.offset) { index, length in
+                HStack(spacing: 24) {
+                    Text("\(index + 10)").frame(width: 28, alignment: .trailing)
+                    Text("\(index + 12)").frame(width: 28, alignment: .trailing)
+                    Text(String(repeating: "x", count: max(1, length)))
+                        .opacity(length == 0 ? 0 : 1)
+                }
+                .font(.callout.monospaced())
+                .padding(.horizontal, 12)
+                .frame(height: 20)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .redacted(reason: .placeholder)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading the layer")
     }
 }
 

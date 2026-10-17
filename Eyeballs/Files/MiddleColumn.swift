@@ -18,6 +18,9 @@ struct MiddleColumn: View {
             Group {
                 if model.layer == nil, model.isLoadingLayer {
                     LoadingFileList()
+                } else if model.layer == nil {
+                    // The diff column says why there is nothing here, so this one stays blank.
+                    Color.clear
                 } else {
                     switch windowState.middleTab {
                     case .files: FileListView(model: model, windowState: windowState)
@@ -61,9 +64,6 @@ struct FileListView: View {
             }
             .listStyle(.inset)
             .scrollContentBackground(.hidden)
-        } else {
-            ContentUnavailableView("No layer", systemImage: "doc.on.doc", description: Text("Pick a layer to see its files."))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

@@ -44,17 +44,14 @@ struct LayerOverviewCard: View {
                 .help("Start a thread about this whole layer")
             }
 
-            HStack(spacing: 16) {
-                stat(symbol: "point.3.connected.trianglepath.dotted", text: count(content.commits.count, "commit"))
-                stat(symbol: "doc.on.doc", text: count(content.fileCount, "file"))
-                HStack(spacing: 4) {
-                    Text("+\(content.additions)").foregroundStyle(Color.diffAddedText)
-                    Text("−\(content.deletions)").foregroundStyle(Color.diffDeletedText)
-                }
-                .font(.callout.weight(.semibold).monospaced())
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(content.additions) lines added, \(content.deletions) lines deleted")
-                stat(symbol: "bubble.left", text: content.threadCount == 0 ? "No open threads" : count(content.threadCount, "open thread"))
+            if hasNoChanges {
+                Label("\(content.layer?.branch ?? "This layer") has no commits of its own yet, so there are no changes to review. You can still comment on the layer.",
+                      systemImage: "circle.dashed")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                stats
             }
 
             if !content.commits.isEmpty {
@@ -67,6 +64,23 @@ struct LayerOverviewCard: View {
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.paneBackground)
+    }
+
+    private var hasNoChanges: Bool { content.layer != nil && content.commits.isEmpty && content.fileCount == 0 }
+
+    private var stats: some View {
+        HStack(spacing: 16) {
+            stat(symbol: "point.3.connected.trianglepath.dotted", text: count(content.commits.count, "commit"))
+            stat(symbol: "doc.on.doc", text: count(content.fileCount, "file"))
+            HStack(spacing: 4) {
+                Text("+\(content.additions)").foregroundStyle(Color.diffAddedText)
+                Text("−\(content.deletions)").foregroundStyle(Color.diffDeletedText)
+            }
+            .font(.callout.weight(.semibold).monospaced())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(content.additions) lines added, \(content.deletions) lines deleted")
+            stat(symbol: "bubble.left", text: content.threadCount == 0 ? "No open threads" : count(content.threadCount, "open thread"))
+        }
     }
 
     /// "Builds on models", with the layer's name as a link to it. The trunk is plain text.
