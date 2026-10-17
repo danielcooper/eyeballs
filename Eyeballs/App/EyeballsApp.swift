@@ -12,6 +12,7 @@ struct EyeballsApp: App {
         Window("Eyeballs", id: "main") {
             MainView(model: appDelegate.session.model, windowState: appDelegate.session.windowState)
                 .onOpenURL { appDelegate.session.open($0) }
+                .modifier(RemembersWindowOpener(session: appDelegate.session))
         }
         .defaultSize(width: 1320, height: 840)
         .defaultLaunchBehavior(appDelegate.session.launch.isHarnessRun ? .suppressed : .presented)
@@ -32,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) lazy var session = AppSession()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if session.usesLiveServices { LiveServices.start(in: session) }
         #if DEBUG
         if let folder = session.launch.screenshotFolder {
             ScreenshotHarness(session: session).run(writingTo: folder)
@@ -48,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         session.windowState.pane?.flushAllDrafts()
+        session.live?.stop()
     }
 }
 
@@ -62,6 +65,9 @@ struct ReviewCommands: Commands {
     private var pane: DiffPaneController? { session.windowState.pane }
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button("Install Command Line Tool…") { CommandLineTool.install() }
+        }
         CommandGroup(replacing: .newItem) {
             Button("Open Repository…") { RepositoryPicker.choose(for: model) }
                 .keyboardShortcut("o")
@@ -108,6 +114,20 @@ struct ReviewCommands: Commands {
     private func title(forLayerAt position: Int) -> String {
         guard let layer = model.selectedStack?.layers.first(where: { $0.position == position }) else { return "Layer \(position)" }
         return "Layer \(position): \(layer.branch)"
+    }
+}
+
+/// Hands the window's `openWindow` action to the session, so an agent's `eyeballs review` can
+/// open the window again after you closed it.
+private struct RemembersWindowOpener: ViewModifier {
+    let session: AppSession
+    @Environment(\.openWindow) private var openWindow
+
+    func body(content: Content) -> some View {
+        content.onAppear {
+            let openWindow = openWindow
+            session.openMainWindow = { openWindow(id: "main") }
+        }
     }
 }
 

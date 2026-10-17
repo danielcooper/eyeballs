@@ -8,6 +8,13 @@ final class AppSession {
     let windowState = ReviewWindowState()
     let launch = LaunchOptions(arguments: CommandLine.arguments, defaults: .standard)
     private(set) var backend: (any ReviewBackend)?
+    /// The store, socket and backend of a real run. Nil in demo and harness runs.
+    var live: LiveServices?
+    /// Opens the main window after you closed it. The window sets this when it first appears.
+    var openMainWindow: (() -> Void)?
+
+    /// True when this run uses the store and the socket, rather than the demo or a harness.
+    var usesLiveServices: Bool { !launch.usesDemoBackend && !launch.isHarnessRun }
 
     init() {
         AppDefaults.register()
@@ -21,6 +28,34 @@ final class AppSession {
     func install(_ backend: any ReviewBackend) {
         self.backend = backend
         model.backend = backend
+    }
+
+    /// Brings the main window to the front, opening it if you closed it. Without `focus` it does
+    /// not take keyboard focus, because an agent may run `eyeballs review` while you type.
+    func showMainWindow(focus: Bool) {
+        guard let window = mainWindow else {
+            openMainWindow?()
+            Task { @MainActor [weak self] in
+                guard let self, let window = self.mainWindow else { return }
+                self.raise(window, focus: focus)
+            }
+            return
+        }
+        raise(window, focus: focus)
+    }
+
+    private var mainWindow: NSWindow? {
+        NSApp.windows.first { $0.identifier?.rawValue.hasPrefix("main") == true && ($0.isVisible || $0.isMiniaturized) }
+    }
+
+    private func raise(_ window: NSWindow, focus: Bool) {
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        if focus {
+            NSApp.activate()
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            window.orderFrontRegardless()
+        }
     }
 
     /// Follows an `eyeballs://` URL. URLs only ever navigate.
