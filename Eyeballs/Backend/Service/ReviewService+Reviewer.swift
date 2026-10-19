@@ -27,7 +27,7 @@ extension ReviewService {
             }
             repositories[facts.repo.id]?.stacks.append(item)
         }
-        return Overview(repositories: order.compactMap { repositories[$0] }, newestRevisions: newest)
+        return Overview(repositories: order.sorted().compactMap { repositories[$0] }, newestRevisions: newest)
     }
 
     struct Overview: Sendable {

@@ -6,19 +6,20 @@ struct SidebarView: View {
     let model: ReviewWindowModel
     let windowState: ReviewWindowState
     @State private var foldedStacks: Set<Int> = []
+    @State private var foldedRepositories: Set<Int> = []
 
     var body: some View {
         // A flat list on purpose: a DisclosureGroup per stack makes SwiftUI's outline diff crash
         // in NSOutlineView when a stack loses layers between reloads.
         List(selection: selection) {
-            ForEach(model.repositories) { repository in
-                Section {
+            ForEach(model.repositories, id: \.sidebarID) { repository in
+                Section(isExpanded: isExpanded(repository.id)) {
                     if repository.stacks.isEmpty {
                         Text("No stacks yet")
                             .foregroundStyle(.secondary)
                             .selectionDisabled()
                     }
-                    ForEach(repository.stacks) { stack in
+                    ForEach(repository.stacks, id: \.sidebarID) { stack in
                         StackRows(stack: stack, agentName: model.agent.agentName, isFolded: foldedStacks.contains(stack.id)) {
                             if foldedStacks.contains(stack.id) { foldedStacks.remove(stack.id) } else { foldedStacks.insert(stack.id) }
                         } askToRestack: { layer in
@@ -33,6 +34,16 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
+    }
+
+    /// A sidebar section left to SwiftUI can arrive folded when it appears while the window is
+    /// open, which hides its stacks, so the sidebar owns whether each one is open.
+    private func isExpanded(_ repositoryID: Int) -> Binding<Bool> {
+        Binding {
+            !foldedRepositories.contains(repositoryID)
+        } set: { expanded in
+            if expanded { foldedRepositories.remove(repositoryID) } else { foldedRepositories.insert(repositoryID) }
+        }
     }
 
     private var selection: Binding<LayerSelection?> {
@@ -59,7 +70,7 @@ private struct StackRows: View {
         header
             .selectionDisabled()
         if !isFolded {
-            ForEach(stack.layers.sorted { $0.position > $1.position }) { layer in
+            ForEach(stack.layers.sorted { $0.position > $1.position }, id: \.sidebarID) { layer in
                 LayerRow(layer: layer, parentBranch: parentBranch(of: layer), agentName: agentName) {
                     askToRestack(layer)
                 }
@@ -227,3 +238,9 @@ private struct TrunkRow: View {
         .help("The stack builds on \(trunk)")
     }
 }
+
+// The list flattens rows from every level into one outline, so a repository, a stack and a
+// layer that share a number would share an identity. These keep the three kinds apart.
+private extension RepositoryItem { var sidebarID: String { "repo-\(id)" } }
+private extension StackItem { var sidebarID: String { "stack-\(id)" } }
+private extension LayerItem { var sidebarID: String { "layer-\(id)" } }

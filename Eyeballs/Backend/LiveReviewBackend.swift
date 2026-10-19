@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import EyeballsKit
 import EyeballsStore
 
@@ -325,6 +326,24 @@ final class LiveReviewBackend: ReviewBackend, ReviewServiceObserver {
 }
 
 #if DEBUG
+extension LiveReviewBackend {
+    /// The sidebar drawn on its own from the live model, because the window's sidebar is glass,
+    /// which a cached display leaves blank.
+    func snapshotSidebar(to path: String) {
+        let host = NSHostingView(rootView: SidebarView(model: model, windowState: ReviewWindowState())
+            .scrollContentBackground(.hidden).foregroundStyle(Color.white).background(Color.black))
+        host.frame = NSRect(x: 0, y: 0, width: 320, height: 900)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        host.layoutSubtreeIfNeeded()
+        guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return }
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+    }
+}
+
 extension LiveReviewBackend: WindowSnapshotting {
     nonisolated func snapshotWindow(to path: String) async -> Bool {
         await MainActor.run {
@@ -333,6 +352,7 @@ extension LiveReviewBackend: WindowSnapshotting {
                   let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
             view.cacheDisplay(in: view.bounds, to: bitmap)
             guard let png = bitmap.representation(using: .png, properties: [:]) else { return false }
+            snapshotSidebar(to: path.replacingOccurrences(of: ".png", with: "-sidebar.png"))
             return (try? png.write(to: URL(fileURLWithPath: path))) != nil
         }
     }
