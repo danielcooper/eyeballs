@@ -5,8 +5,11 @@ import SwiftUI
 struct SidebarView: View {
     let model: ReviewWindowModel
     let windowState: ReviewWindowState
+    @State private var foldedStacks: Set<Int> = []
 
     var body: some View {
+        // A flat list on purpose: a DisclosureGroup per stack makes SwiftUI's outline diff crash
+        // in NSOutlineView when a stack loses layers between reloads.
         List(selection: selection) {
             ForEach(model.repositories) { repository in
                 Section {
@@ -16,7 +19,9 @@ struct SidebarView: View {
                             .selectionDisabled()
                     }
                     ForEach(repository.stacks) { stack in
-                        StackSection(stack: stack, agentName: model.agent.agentName) { layer in
+                        StackRows(stack: stack, agentName: model.agent.agentName, isFolded: foldedStacks.contains(stack.id)) {
+                            if foldedStacks.contains(stack.id) { foldedStacks.remove(stack.id) } else { foldedStacks.insert(stack.id) }
+                        } askToRestack: { layer in
                             windowState.askToRestack(layer, in: model)
                         }
                     }
@@ -39,43 +44,58 @@ struct SidebarView: View {
     }
 }
 
-private struct StackSection: View {
+/// One stack as plain list rows: its header, then its layers top first, then the trunk.
+private struct StackRows: View {
     let stack: StackItem
     let agentName: String?
+    let isFolded: Bool
+    let toggleFolded: () -> Void
     let askToRestack: (LayerItem) -> Void
-    @State private var isExpanded = true
 
     /// The badge is the sum of the layer rows' "need you" counts, so the two always agree.
     private var needsYou: Int { stack.layers.reduce(0) { $0 + $1.needsYouCount } }
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
+        header
+            .selectionDisabled()
+        if !isFolded {
             ForEach(stack.layers.sorted { $0.position > $1.position }) { layer in
                 LayerRow(layer: layer, parentBranch: parentBranch(of: layer), agentName: agentName) {
                     askToRestack(layer)
                 }
+                .padding(.leading, 18)
                 .tag(LayerSelection(stackID: stack.id, layerID: layer.id))
             }
             TrunkRow(trunk: stack.trunk)
+                .padding(.leading, 18)
                 .selectionDisabled()
-        } label: {
-            Label {
-                HStack(spacing: 8) {
-                    Text(stack.name)
-                        .font(.body.weight(.semibold))
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    if needsYou > 0 {
-                        Chip(text: NeedsYouText.words(needsYou), symbol: nil, tint: .orange, isSmall: true)
-                    }
-                }
-            } icon: {
-                Image(systemName: "square.stack.3d.up")
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityValue(needsYou == 1 ? "1 thread needs you" : "\(needsYou) threads need you")
-            .help(needsYou == 0 ? "Nothing needs you in this stack" : "Threads in this stack that need you: \(needsYou)")
         }
+    }
+
+    private var header: some View {
+        Button(action: toggleFolded) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isFolded ? 0 : 90))
+                    .frame(width: 12)
+                Image(systemName: "square.stack.3d.up")
+                Text(stack.name)
+                    .font(.body.weight(.semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if needsYou > 0 {
+                    Chip(text: NeedsYouText.words(needsYou), symbol: nil, tint: .orange, isSmall: true)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Stack \(stack.name), \(isFolded ? "folded" : "unfolded")")
+        .accessibilityValue(needsYou == 1 ? "1 thread needs you" : "\(needsYou) threads need you")
+        .help(needsYou == 0 ? "Nothing needs you in this stack" : "Threads in this stack that need you: \(needsYou)")
     }
 
     private func parentBranch(of layer: LayerItem) -> String {

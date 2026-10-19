@@ -52,6 +52,7 @@ final class UISelfTest {
         await checkSelectionAcrossThreeRows()
         await checkReloadWithDifferentLayer()
         await checkSameLayerNewRevision()
+        await checkSidebarSurvivesLosingLayers()
         await checkResizeRewraps()
         await checkShortcutsNeedTableFocus()
         await checkReviewLoop()
@@ -310,6 +311,44 @@ final class UISelfTest {
                                            "visible_view_updated": shownText.map { $0 == changedText } ?? true, "pass": pass])
         model.layer = original
         await window.settle(400)
+    }
+
+    /// A stack that loses layers, and a stack that disappears, between reloads. SwiftUI's outline
+    /// list used to crash in NSOutlineView here.
+    private func checkSidebarSurvivesLosingLayers() async {
+        let original = model.repositories
+        var shrunk = original
+        for index in shrunk.indices {
+            for stackIndex in shrunk[index].stacks.indices {
+                shrunk[index].stacks[stackIndex].layers = Array(shrunk[index].stacks[stackIndex].layers.prefix(1))
+            }
+        }
+        model.repositories = shrunk
+        await window.settle(300)
+        var fewer = shrunk
+        fewer[0].stacks = Array(fewer[0].stacks.dropLast())
+        model.repositories = fewer
+        await window.settle(300)
+        model.repositories = original
+        await window.settle(300)
+        // A second repository arrives while the window is open, its IDs repeating the first's.
+        var second = original[0]
+        second = RepositoryItem(id: original[0].stacks[0].id + 1, name: "other", path: "/tmp/other", stacks: second.stacks.map { stack in
+            var stack = stack
+            stack = StackItem(id: stack.id + 1000, name: "other-stack", trunk: stack.trunk, revision: stack.revision,
+                              layers: stack.layers.map { layer in var layer = layer; layer = LayerItem(id: layer.id + 1000, position: layer.position,
+                                  branch: layer.branch, prNumber: nil, fileCount: layer.fileCount, additions: layer.additions, deletions: layer.deletions,
+                                  openThreadCount: 0, status: layer.status); return layer },
+                              openThreadCount: 0, needsYouCount: 0)
+            return stack
+        })
+        model.repositories = original + [second]
+        await window.settle(300)
+        model.repositories = [second] + original
+        await window.settle(300)
+        model.repositories = original
+        await window.settle(300)
+        record("sidebar_survives_losing_layers", ["pass": true])
     }
 
     private func checkReloadWithDifferentLayer() async {
