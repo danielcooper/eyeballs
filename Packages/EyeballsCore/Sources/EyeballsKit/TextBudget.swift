@@ -1,4 +1,4 @@
-/// The design's token budgets. Golden tests fail when a fixture's output grows past one.
+/// Token budgets for what the agent reads. Golden tests fail when a fixture's output grows past one.
 public enum TextBudget {
     /// A monitor or `wait` line, in characters.
     public static let eventLine = 200

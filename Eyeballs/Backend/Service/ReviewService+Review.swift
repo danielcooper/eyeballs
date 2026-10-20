@@ -4,19 +4,19 @@ import EyeballsStore
 import Foundation
 
 extension ReviewService {
-    /// `eyeballs review`, following design C, "`eyeballs review`, step by step".
+    /// `eyeballs review`: find the stack, check for unreplied threads, snapshot every layer, then pin, record, port and show.
     func review(_ arguments: ReviewArguments, client: ClientIdentity) async throws -> (ReviewResult, String) {
         try await oneAtATime.run { try await self.reviewNow(arguments, client: client) }
     }
 
     private func reviewNow(_ arguments: ReviewArguments, client: ClientIdentity) async throws -> (ReviewResult, String) {
         let session = try register(client)
-        // Step 1. Finding the stack refuses with mid_operation during a real operation (fix 9).
+        // Step 1. Finding the stack refuses with mid_operation during a real operation.
         let found = try await findStack(for: arguments, client: client)
         let repo = try await recordRepo(found.repository, remote: found.discovered.remoteRepository)
         let stack = try store.findOrCreateStack(repoID: repo.id, Self.description(of: found.discovered)).stack
 
-        // Step 2, across the whole stack, whichever session read the threads (fix 11).
+        // Step 2, across the whole stack, whichever session read the threads.
         if !arguments.force { try refuseUnreplied(stack) }
 
         // Steps 3 to 5.
@@ -74,7 +74,7 @@ extension ReviewService {
     }
 
     /// Refuses with `unreplied` when an open thread that `inbox` already showed has no newer
-    /// agent reply (fix 11). `--force` skips this.
+    /// agent reply. `--force` skips this.
     func refuseUnreplied(_ stack: StackRecord) throws {
         let shown = try store.threadsWaitingOnAgent(stackID: stack.id).filter(\.wasShown)
         guard !shown.isEmpty else { return }
@@ -285,7 +285,7 @@ extension ReviewService {
     // MARK: Snapshots you start
 
     /// Takes a `human_start` revision when the branch tips moved past the latest revision, as
-    /// Submit and Send now do (fix 13). Returns the newest revision.
+    /// Submit and Send now do. Returns the newest revision.
     ///
     /// When git cannot read the stack now, for example during the agent's rebase, it keeps the
     /// latest revision, because your comment matters more than a fresh snapshot.

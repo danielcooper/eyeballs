@@ -1,6 +1,6 @@
 import Foundation
 
-/// Checks whether a rebase or `gh stack modify` is part way through, by fix 9's rules.
+/// Checks whether a rebase or `gh stack modify` is part way through.
 ///
 /// - A `gh-stack-modify-state` file blocks only in its applying or conflict phase, or in a phase
 ///   gh-stack itself would refuse. In its `pending_submit` phase it blocks nothing, and its

@@ -6,7 +6,7 @@ import Foundation
 /// It accepts many connections at once on dispatch sources, refuses other users with
 /// `getpeereid`, caps each request at 1 MB, and hands each request to a `RequestHandler`. It
 /// remembers every open `wait` and `watch` connection by its Claude process, so
-/// `broadcast(_:to:)` reaches all of a driver's listeners at once (fix 10).
+/// `broadcast(_:to:)` reaches all of a driver's listeners at once.
 ///
 /// Network.framework's `NWListener` is not used, because it does not expose the peer's
 /// credentials.

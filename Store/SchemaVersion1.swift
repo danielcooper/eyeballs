@@ -1,5 +1,5 @@
 extension StoreMigrations {
-    /// Schema version 1, exactly as design section B gives it.
+    /// Schema version 1.
     ///
     /// Never edit this text once it has shipped. `Migrations.lock` holds its hash, and a test fails
     /// if it changes. Add a new migration instead.

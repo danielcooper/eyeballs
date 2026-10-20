@@ -1,7 +1,7 @@
 /// Turns any `Encodable` into a `JSONValue`, keeping keys in the order `encode(to:)` writes them.
 ///
 /// A nil optional property becomes `null` rather than vanishing, so every result object carries
-/// every key the design lists, such as `"next_page":null`.
+/// every key, such as `"next_page":null`.
 final class JSONValueEncoder: Encoder {
     let node: EncodingNode
     let codingPath: [any CodingKey]

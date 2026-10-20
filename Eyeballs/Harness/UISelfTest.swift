@@ -515,7 +515,7 @@ final class UISelfTest {
         await window.settle()
     }
 
-    // MARK: Checks from the design review
+    // MARK: More checks
 
     /// Runs of three unchanged lines or fewer show in place, never behind a "Show" row.
     private func checkSmallGapsShowInline() {

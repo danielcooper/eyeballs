@@ -102,7 +102,7 @@ import Testing
         let fixture = try BackendFixture()
         try await fixture.review()
         try await fixture.submitComment("Check this.", lines: 21...21)
-        // The driver read the inbox. A second session that later runs review is still refused (fix 11).
+        // The driver read the inbox. A second session that later runs review is still refused.
         _ = try await fixture.inbox()
         let other = BackendFixture.client(session: "session-2", process: BackendFixture.otherProcess, cwd: fixture.repo.path)
         await #expect(throws: EyeballsError.self) { try await fixture.review(as: other) }

@@ -10,7 +10,7 @@ extension ReviewService {
     ///
     /// A reply from a session that does not drive the stack is saved with a `not_driver` warning,
     /// and one to a resolved thread with `thread_resolved`, because agent text is never lost
-    /// (fix 11). When the driver is gone, the caller takes the role first.
+    ///. When the driver is gone, the caller takes the role first.
     func reply(_ arguments: ReplyArguments, client: ClientIdentity) async throws -> (ReplyResult, String) {
         try await oneAtATime.run { try await self.replyNow(arguments, client: client) }
     }

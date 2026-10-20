@@ -7,7 +7,7 @@ public enum WireProtocol {
     public static let version = 1
 }
 
-/// Size limits from the design's security rules.
+/// Size limits on what a request and a reply may carry.
 public enum WireLimits {
     /// One comment body, reply body or review note, in UTF-8 bytes.
     public static let maximumBodyBytes = 64 * 1024
@@ -89,7 +89,7 @@ public struct ClaudeProcess: Codable, Sendable, Hashable {
 
 /// Which `wait` and `watch` connections an event goes to.
 ///
-/// Claude Code sessions are keyed by their Claude process (fix 10), so a subagent's `wait` and
+/// Claude Code sessions are keyed by their Claude process, so a subagent's `wait` and
 /// the main session's monitor both wake. Other agents, such as a test script, are keyed by
 /// their session.
 public enum ListenerKey: Hashable, Sendable {

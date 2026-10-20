@@ -39,7 +39,7 @@ struct Eyeballs: ParsableCommand {
         return "eyeballs \(version) (\(build)) protocol \(WireProtocol.version)"
     }
 
-    /// Runs the command, mapping every error to the design's exit-code table (fix 6).
+    /// Runs the command, mapping every error to its exit status in `ErrorCode`.
     ///
     /// swift-argument-parser's own `main()` exits 1 for any error it does not know, and Claude
     /// Code reads exit 1 as a plain failure. Here usage errors still exit 64, and anything

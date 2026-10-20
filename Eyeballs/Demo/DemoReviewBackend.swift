@@ -306,7 +306,7 @@ struct DemoThread {
                    anchorNote: anchorNote, originalLines: originalLines)
     }
 
-    /// The design's rule table: the first rule that matches wins.
+    /// The derived thread state rules: the first rule that matches wins.
     var derivedState: ThreadState {
         if isResolved { return .resolved }
         guard let last = comments.last else { return .draft }

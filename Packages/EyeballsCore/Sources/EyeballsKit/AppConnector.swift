@@ -3,7 +3,7 @@ import Foundation
 
 /// Connects the `eyeballs` command to the app, starting the app first when the command may.
 ///
-/// Only commands the design marks "Starts the app" pass a start mode other than `.never`.
+/// Only commands that may start the app pass a start mode other than `.never`.
 /// The command starts the app at its own bundle's path, so a Debug build never answers for
 /// Release.
 public struct AppConnector: Sendable {

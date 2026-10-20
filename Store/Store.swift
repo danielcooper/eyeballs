@@ -6,7 +6,7 @@ import GRDB
 ///
 /// Only the app opens it, and only after it holds the `InstanceLock`. Read with `reader`, for
 /// example to observe a stack with `ValueObservation`, and change it only through the methods
-/// in the `Store+…` files, which keep the design's rules. Every method runs in one transaction
+/// in the `Store+…` files, which keep its rules. Every method runs in one transaction
 /// and blocks until it finishes.
 public final class Store: Sendable {
     public let home: EyeballsHome

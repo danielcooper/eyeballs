@@ -1,6 +1,6 @@
 import Foundation
 
-/// The `~/.local/bin/eyeballs` link that Install Command Line Tool creates (fix 8).
+/// The `~/.local/bin/eyeballs` link that Install Command Line Tool creates.
 ///
 /// Debug builds use `~/.local/bin/eyeballs-debug`, so a click in a Debug build run from Xcode
 /// never points every agent session at the Debug store. The app calls `install(pointingTo:)`

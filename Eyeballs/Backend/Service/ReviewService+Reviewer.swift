@@ -167,7 +167,7 @@ extension ReviewService {
                           state: windowState(of: thread, facts: facts), anchorNote: note, originalLines: original)
     }
 
-    /// The window's state: the design's derived state, except that a thread whose newest comment
+    /// The window's state: the derived state from `ThreadProgress`, except that a thread whose newest comment
     /// is your unsent reply shows as a draft, because you have already answered it.
     func windowState(of thread: ThreadRecord, facts: StackFacts) -> ThreadState {
         let state = ThreadState(facts.progress(of: thread).state)
@@ -239,7 +239,7 @@ extension ReviewService {
     // MARK: What you do in the window
 
     /// Opens a thread where you clicked. Send now first takes a snapshot when the branches moved,
-    /// then ports the thread to the newest revision and wakes the agent (fix 13).
+    /// then ports the thread to the newest revision and wakes the agent.
     func addComment(_ body: String, at anchor: ThreadAnchor, layerID: Int, viewing revisionID: Int, sendNow: Bool) async throws {
         try await oneAtATime.run {
             _ = try await self.addCommentNow(body, at: anchor, layerID: layerID, viewing: revisionID, sendNow: sendNow)
@@ -314,7 +314,7 @@ extension ReviewService {
         }
     }
 
-    /// Submits the stack's draft review, following design D, "What Submit review does".
+    /// Submits the stack's draft review: snapshot if the branches moved, port the drafts, commit, then wake the agent.
     func submitReview(stackID: Int, verdict: ReviewVerdict, summary: String) async throws {
         try await oneAtATime.run { _ = try await self.submitReviewNow(stackID: stackID, verdict: verdict, summary: summary) }
     }
@@ -375,7 +375,7 @@ extension ReviewService {
         try await portOpenThreads(stackID: stackID, to: revision, in: repository, only: [threadID])
     }
 
-    /// Sends `review.submitted` or `review.approved` to every connection of the driver's Claude process (fix 10).
+    /// Sends `review.submitted` or `review.approved` to every connection of the driver's Claude process.
     private func announceReview(_ review: ReviewRecord, stackID: Int) async {
         guard let facts = try? facts(stackID), let driver = facts.driver else { return }
         let event = AgentEvents.reviewSubmitted(

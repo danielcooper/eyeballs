@@ -5,8 +5,8 @@ import Foundation
 
 /// Answers every request on the app's socket, by handing it to the `ReviewService`.
 ///
-/// Expected problems reach the agent as `EyeballsError`s with the codes in design C's exit-code
-/// table. Anything else becomes `internal`, which exits 70, and is logged.
+/// Expected problems reach the agent as `EyeballsError`s with codes from `ErrorCode`, each
+/// with its exit status. Anything else becomes `internal`, which exits 70, and is logged.
 struct AgentRequestHandler: RequestHandler {
     let service: ReviewService
 
@@ -79,7 +79,7 @@ struct AgentRequestHandler: RequestHandler {
         }
     }
 
-    /// The error the agent sees, with its code from design C's exit-code table.
+    /// The error the agent sees, with its code from `ErrorCode`.
     static func agentError(_ error: any Error) -> EyeballsError {
         switch error {
         case let error as EyeballsError:

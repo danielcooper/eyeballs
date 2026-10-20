@@ -3,7 +3,7 @@ import Foundation
 /// Where a thread stands, worked out from its status and its comments.
 ///
 /// The window and the agent's packets both use this, so they never disagree. It follows the
-/// "Derived thread state" table in design section B: the first rule that matches wins.
+/// rules in order, and the first rule that matches wins.
 /// Deleted comments are ignored, and an unsent comment of yours never counts as the last word.
 public struct ThreadProgress: Hashable, Sendable {
     /// What you see on the thread's status chip.
@@ -49,7 +49,7 @@ public struct ThreadProgress: Hashable, Sendable {
     }
 }
 
-/// The derived thread states of design section B, in rule order.
+/// The derived thread states, in rule order.
 public enum DerivedThreadState: Hashable, Sendable, CaseIterable {
     /// `status = resolved`.
     case resolved

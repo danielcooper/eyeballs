@@ -4,7 +4,7 @@ import EyeballsStore
 
 /// The real app's moving parts: the instance lock, the store, the socket and the backend.
 ///
-/// `start` works in the order design A's security rules give: take the lock, open the store,
+/// `start` works in a fixed order: take the lock, open the store,
 /// then listen. Demo and harness runs never start these.
 @MainActor
 final class LiveServices {
@@ -94,7 +94,7 @@ final class LiveServices {
     }
 }
 
-/// Install Command Line Tool… and the link repair at launch (fix 8).
+/// Install Command Line Tool… and the link repair at launch.
 @MainActor
 enum CommandLineTool {
     static var link: CommandLineToolLink { .standard(debug: LiveServices.isDebug) }

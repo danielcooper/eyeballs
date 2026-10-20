@@ -31,7 +31,7 @@ extension ReviewService {
     }
 
     /// Rebinds the driver role by `CLAUDE_PID` only when the source is `clear`, so an in-process
-    /// `/resume` of another conversation cannot take it (fix 11). Prints context only when the
+    /// `/resume` of another conversation cannot take it. Prints context only when the
     /// session has state, in 600 characters or fewer.
     private func sessionStart(_ client: ClientIdentity, hookSession: String?, source: String) async throws -> HookResult {
         guard let session = try register(client, hookSession: hookSession) else { return HookResult(output: nil) }
@@ -67,11 +67,11 @@ extension ReviewService {
         return HookResult(output: nil)
     }
 
-    /// The Stop hook (design C and fix 12): blocks once per reason, recorded in `stop_block`.
+    /// The Stop hook: blocks once per reason, recorded in `stop_block`.
     ///
     /// There is no early exit on `stop_hook_active`, because that flag stays true for the whole
     /// continuation. There is no "a wait is connected" shortcut either, because that wait may
-    /// belong to a subagent (fix 10).
+    /// belong to a subagent.
     private func stop(_ client: ClientIdentity, hookSession: String?) async throws -> HookResult {
         guard let session = try register(client, hookSession: hookSession) else { return HookResult(output: nil) }
         var reasons: [(key: String, text: String)] = []

@@ -43,7 +43,7 @@ public struct EyeballsError: Error, Codable, Sendable, Hashable, CustomStringCon
     }
 }
 
-/// The error codes in the design's exit-code table. Codes added later decode too, and exit 70.
+/// The error codes, each with its exit status. Codes added later decode too, and exit 70.
 public struct ErrorCode: WireName {
     public let rawValue: String
     public init(rawValue: String) { self.rawValue = rawValue }
@@ -60,7 +60,7 @@ public struct ErrorCode: WireName {
     public static let unreplied: ErrorCode = "unreplied"
     public static let versionMismatch: ErrorCode = "version_mismatch"
 
-    /// The process exit status for this code. Anything not in the table exits 70 (fix 6).
+    /// The process exit status for this code. Anything not in the table exits 70.
     public var exitStatus: Int32 {
         switch self {
         case .notARepo, .noStack, .unknownThread, .badInput, .unsupportedCatalog: ExitStatus.dataError

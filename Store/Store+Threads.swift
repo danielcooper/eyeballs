@@ -40,7 +40,7 @@ public struct NewAnchor: Hashable, Sendable {
 public enum CommentDelivery: Hashable, Sendable {
     /// Into the stack's draft review, sent when you submit it.
     case addToReview
-    /// At once, on its own. The design calls this Send now.
+    /// At once, on its own. The window calls this Send now.
     case sendNow
 }
 

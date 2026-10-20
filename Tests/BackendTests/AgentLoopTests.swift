@@ -56,7 +56,7 @@ import Testing
         #expect(text.contains("Alex: Mostly naming."))
         #expect(text.contains("## \(submitted.thread) · new · layer 1 a · a.txt:21-22\n   21 | line 21\n   22 | line 22\nAlex: Use a constant here."))
 
-        // An interrupted inbox hides nothing: the next one shows the same thread, labelled (fix 11).
+        // An interrupted inbox hides nothing: the next one shows the same thread, labelled.
         let (second, again) = try await fixture.inbox()
         #expect(second.threads.map(\.id) == [submitted.thread])
         #expect(second.threads.first?.shownBefore == true)
@@ -172,7 +172,7 @@ import Testing
         let first = await fixture.service.hook(stop, client: fixture.agent)
         #expect(first.output?["decision"] == .string("block"))
         #expect(first.output?["reason"] == .string("Eyeballs: Alex submitted review 1 (1 thread). Run eyeballs inbox."))
-        // stop_hook_active stays true, and the same reason never blocks twice (fix 12).
+        // stop_hook_active stays true, and the same reason never blocks twice.
         let second = await fixture.service.hook(stop, client: fixture.agent)
         #expect(second.output == nil)
 
@@ -186,7 +186,7 @@ import Testing
     @Test func sessionStartAfterClearMovesTheDriverToTheNewSession() async throws {
         let fixture = try BackendFixture()
         try await fixture.review()
-        // After /clear, the hook arrives with a new session ID and the same CLAUDE_PID (fix 11).
+        // After /clear, the hook arrives with a new session ID and the same CLAUDE_PID.
         let cleared = BackendFixture.client(session: nil, process: BackendFixture.agentProcess, cwd: fixture.repo.path)
         let input = try JSONValue(parsing: #"{"session_id":"session-after-clear","source":"clear"}"#)
         let result = await fixture.service.hook(HookArguments(event: .sessionStart, input: input), client: cleared)

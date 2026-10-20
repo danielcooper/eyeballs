@@ -54,7 +54,7 @@ final class ReviewService: Sendable {
     }
     #endif
 
-    /// Sends an event to every live `wait` and `watch` connection of one listener (fix 10).
+    /// Sends an event to every live `wait` and `watch` connection of one listener.
     @discardableResult
     func broadcast(_ event: StreamEvent, to listener: ListenerKey) -> Int {
         sink.withLock { $0 }?.broadcast(event, to: listener) ?? 0
@@ -124,7 +124,7 @@ final class ReviewService: Sendable {
         return processes.isAlive(ClaudeProcess(pid: Int32(pid), start: Int64(start)))
     }
 
-    /// The driver rule for `inbox`, `wait` and `reply` (fix 11): the caller keeps the role, or
+    /// The driver rule for `inbox`, `wait` and `reply`: the caller keeps the role, or
     /// takes it when no live session holds it.
     func claimIfFree(_ stack: StackRecord, by caller: AgentSessionRecord?) throws -> DriverStanding {
         let current = try stack.driverSession.flatMap { try store.session(id: $0) }

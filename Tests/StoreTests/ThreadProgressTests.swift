@@ -2,7 +2,7 @@
 import Foundation
 import Testing
 
-/// The "Derived thread state" table of design section B, row by row, and the agent-side kinds.
+/// Every derived thread state rule, one by one, and the agent-side kinds.
 struct ThreadProgressTests {
     struct Row: CustomTestStringConvertible, Sendable {
         let name: String

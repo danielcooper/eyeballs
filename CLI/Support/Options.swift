@@ -51,7 +51,7 @@ enum Install {
 struct AppCall {
     var operation: OperationName
     var agent: AgentOptions
-    /// Only commands the design marks "Starts the app" pass a mode other than `.never`.
+    /// Only commands that may start the app pass a mode other than `.never`.
     var start: AppConnector.Start
     var timeout: Duration?
 

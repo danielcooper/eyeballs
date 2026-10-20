@@ -6,7 +6,7 @@ import Foundation
 extension ReviewService {
     // MARK: inbox
 
-    /// `eyeballs inbox`: every thread that waits on the agent, bottom layer first (fix 11).
+    /// `eyeballs inbox`: every thread that waits on the agent, bottom layer first.
     ///
     /// Threads shown before are included and labelled. Showing a comment for the first time sets
     /// its `delivered_at`, which only stops repeat wake-ups. `--peek` changes nothing.
@@ -169,7 +169,7 @@ extension ReviewService {
     // MARK: wait and watch
 
     /// `eyeballs wait`: answers at once when something already waits, else keeps the connection
-    /// open for the next event routed to the caller's Claude process (fix 10).
+    /// open for the next event routed to the caller's Claude process.
     func wait(_ arguments: WaitArguments, client: ClientIdentity) async throws -> HandlerOutcome {
         try await oneAtATime.run { try await self.waitNow(arguments, client: client) }
     }

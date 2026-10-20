@@ -8,7 +8,7 @@ When an agent builds a stack of pull requests, you want to read it and leave it 
 
 ## Status
 
-Eyeballs is at an early stage, but the whole review loop works, and a Claude Code plugin teaches the agent the loop and wakes it when you send a review. The plan is in [the design document](docs/design.md).
+Eyeballs is at an early stage, but the whole review loop works, and a Claude Code plugin teaches the agent the loop and wakes it when you send a review.
 
 ## Use it with Claude Code
 

@@ -2,7 +2,7 @@ import EyeballsKit
 import Foundation
 import Testing
 
-/// The packet text the agent reads, checked against the design's examples and token budgets.
+/// The packet text the agent reads, checked against fixed examples and the token budgets.
 @Suite struct PacketTextTests {
     static let alex = ReviewerName(name: "Alex")
 
