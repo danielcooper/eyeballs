@@ -194,6 +194,11 @@ extension DiffPaneController {
     // MARK: Composers
 
     func openComposer(_ key: ComposerKey) {
+        // One commit's line numbers are not the layer's, so a new thread there would land wrong.
+        if case .draft(.newThread) = key, model.commitFocus != nil {
+            NSSound.beep()
+            return
+        }
         var state = viewState
         if let attachedThread = threadID(attachedTo: key) {
             for other in state.openComposers where other != key && threadID(attachedTo: other) == attachedThread {

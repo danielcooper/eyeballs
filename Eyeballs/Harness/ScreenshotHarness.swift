@@ -110,6 +110,15 @@ final class ScreenshotHarness {
         await shoot("18-threads-filter-outdated", window)
         windowState.threadFilter = .all
         windowState.threadScope = .thisLayer
+        windowState.middleTab = .commits
+        await shoot("33-commits-list", window)
+        if let commit = model.layer?.commits.last {
+            model.focusCommit(commit.sha)
+            await window.settle(400)
+            await shoot("34-one-commit", window)
+            model.focusCommit(nil)
+            await window.settle(400)
+        }
         windowState.middleTab = .files
 
         windowState.revealFile("Web/assets/checkout-hero.png")

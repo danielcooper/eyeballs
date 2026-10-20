@@ -25,8 +25,15 @@ struct DetailColumn: View {
     /// controls. Taking it in is always your choice.
     @ViewBuilder
     private var notices: some View {
-        if model.banner != nil || model.errorMessage != nil {
+        if model.banner != nil || model.errorMessage != nil || model.commitFocus != nil {
             VStack(spacing: 8) {
+                if let commit = model.commitFocus {
+                    NoticeBanner(
+                        message: "Showing one commit, \(commit.sha.prefix(7)): \(commit.subject). To comment, show all changes.",
+                        symbol: "smallcircle.filled.circle", tint: .secondary, actions: [
+                            NoticeBanner.Action(title: "Show All Changes", isProminent: true) { model.focusCommit(nil) },
+                        ])
+                }
                 if let banner = model.banner {
                     NoticeBanner(message: banner.message, symbol: "arrow.triangle.2.circlepath.circle.fill", tint: .accentColor, actions: [
                         NoticeBanner.Action(title: banner.actionTitle, isProminent: true) { model.acceptBanner() },

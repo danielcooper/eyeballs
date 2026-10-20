@@ -17,6 +17,8 @@ final class ReviewWindowModel {
     var review = PendingReview()
     var agent = AgentStatus.notListening
     var banner: Banner?
+    /// The one commit the diff shows, read-only. Nil shows all of the layer's changes.
+    var commitFocus: CommitItem?
     var isLoadingLayer = false
     var errorMessage: String?
 
@@ -47,6 +49,7 @@ final class ReviewWindowModel {
     func openRepository(at url: URL) { backend?.openRepository(at: url) }
     func acceptBanner() { backend?.acceptBanner() }
     func closeStacks(_ stackIDs: [Int]) { backend?.closeStacks(stackIDs) }
+    func focusCommit(_ sha: String?) { backend?.focusCommit(sha) }
 
     var allStackIDs: [Int] { repositories.flatMap(\.stacks).map(\.id) }
 }
@@ -72,6 +75,8 @@ protocol ReviewBackend: AnyObject {
     func acceptBanner()
     /// Takes stacks out of the window. Their history stays in the store.
     func closeStacks(_ stackIDs: [Int])
+    /// Shows one commit of the selected layer, or all its changes again with nil.
+    func focusCommit(_ sha: String?)
 }
 
 // MARK: Sidebar
@@ -130,6 +135,8 @@ struct LayerContent: Sendable {
     var files: [FileItem]
     /// Threads on a line range or a file, plus layer-level threads (anchor `.layer`).
     var threads: [ThreadItem]
+    /// False while the pane shows one commit, whose lines are not the layer's.
+    var commentsAllowed = true
 }
 
 struct CommitItem: Identifiable, Hashable, Sendable {

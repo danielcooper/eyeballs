@@ -79,6 +79,7 @@ struct OverviewContent: Equatable {
     var additions: Int
     var deletions: Int
     var threadCount: Int
+    var commentsAllowed = true
 }
 
 struct FileHeaderContent: Equatable {
@@ -91,6 +92,7 @@ struct FileHeaderContent: Equatable {
     var threadCount: Int
     var isCollapsed: Bool
     var isViewed: Bool
+    var commentsAllowed = true
 }
 
 struct HunkHeaderContent: Equatable {
@@ -341,7 +343,8 @@ struct DiffRowBuilder {
             fileCount: layer.files.count,
             additions: layer.files.reduce(0) { $0 + $1.additions },
             deletions: layer.files.reduce(0) { $0 + $1.deletions },
-            threadCount: layer.threads.filter { !$0.isResolved }.count)
+            threadCount: layer.threads.filter { !$0.isResolved }.count,
+            commentsAllowed: layer.commentsAllowed)
     }
 
     private func appendFile(_ prepared: PreparedFile, placement: ThreadPlacement, to rows: inout [DiffRow]) {
@@ -351,7 +354,7 @@ struct DiffRowBuilder {
             path: file.path, oldPath: file.oldPath, change: file.change,
             additions: file.additions, deletions: file.deletions, isBinary: file.isBinary,
             threadCount: placement.threadCount(inFile: file.path), isCollapsed: isCollapsed,
-            isViewed: viewedPaths.contains(file.path))))
+            isViewed: viewedPaths.contains(file.path), commentsAllowed: layer.commentsAllowed)))
         guard !isCollapsed else { return }
 
         let showsLines = !file.isBinary && !(prepared.isBig && !state.loadedBigFiles.contains(file.path))

@@ -216,6 +216,21 @@ extension ReviewService {
         return diff
     }
 
+    /// One commit's own changes, against its first parent, or against nothing for a root commit.
+    func commitFiles(stackID: Int, sha: String) async throws -> [FileItem] {
+        let facts = try facts(stackID)
+        let repository = try await repository(for: facts.repo)
+        guard let commit = ObjectID(sha) else { throw EyeballsError.badInput("That is not a commit ID.") }
+        let parent = try await repository.resolveCommit("\(sha)^") ?? Self.emptyTree
+        var files: [FileItem] = []
+        for file in try await repository.changedFiles(from: parent, to: commit) {
+            files.append(try await fileItem(file, in: repository))
+        }
+        return files
+    }
+
+    private static let emptyTree = ObjectID("4b825dc642cb6eb9a060e54bf8d69288fbee4904")!
+
     private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "heic", "webp", "tiff", "tif", "bmp", "ico"]
 
     private func fileItem(_ file: DiffFile, in repository: GitRepository) async throws -> FileItem {

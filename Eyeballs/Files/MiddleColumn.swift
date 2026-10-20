@@ -8,6 +8,7 @@ struct MiddleColumn: View {
         VStack(spacing: 0) {
             Picker("Show", selection: $windowState.middleTab) {
                 Text("Files").tag(ReviewWindowState.MiddleTab.files)
+                Text("Commits").tag(ReviewWindowState.MiddleTab.commits)
                 Text("Threads").tag(ReviewWindowState.MiddleTab.threads)
             }
             .pickerStyle(.segmented)
@@ -24,6 +25,7 @@ struct MiddleColumn: View {
                 } else {
                     switch windowState.middleTab {
                     case .files: FileListView(model: model, windowState: windowState)
+                    case .commits: CommitListView(model: model)
                     case .threads: ThreadListView(model: model, windowState: windowState)
                     }
                 }
@@ -32,6 +34,77 @@ struct MiddleColumn: View {
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
+    }
+}
+
+/// The layer's commits, newest first, under an "All changes" row. Picking one shows just that
+/// commit's diff.
+struct CommitListView: View {
+    let model: ReviewWindowModel
+
+    var body: some View {
+        if let layer = model.layer {
+            List(selection: selection) {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.stack.3d.up")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("All changes").font(.body.weight(.semibold))
+                        Text(layer.commits.count == 1 ? "1 commit" : "\(layer.commits.count) commits")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+                .tag("")
+                Section("Commits") {
+                    ForEach(layer.commits) { commit in
+                        CommitRow(commit: commit).tag(commit.sha)
+                    }
+                }
+            }
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+        }
+    }
+
+    private var selection: Binding<String?> {
+        Binding {
+            model.commitFocus?.sha ?? ""
+        } set: { sha in
+            let focus = sha.flatMap { $0.isEmpty ? nil : $0 }
+            if focus != model.commitFocus?.sha { model.focusCommit(focus) }
+        }
+    }
+}
+
+private struct CommitRow: View {
+    let commit: CommitItem
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "smallcircle.filled.circle")
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(commit.subject)
+                    .font(.body)
+                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(String(commit.sha.prefix(7))).font(.subheadline.monospaced())
+                    Text("·")
+                    Text(commit.author)
+                    Text("·")
+                    Text(commit.date, style: .relative)
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -7,7 +7,7 @@ import Observation
 @Observable
 final class ReviewWindowState {
     enum MiddleTab: Hashable {
-        case files, threads
+        case files, commits, threads
     }
 
     var middleTab = MiddleTab.files

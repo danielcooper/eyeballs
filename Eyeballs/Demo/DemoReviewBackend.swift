@@ -127,6 +127,19 @@ final class DemoReviewBackend: ReviewBackend {
         publishRepositories()
     }
 
+    func focusCommit(_ sha: String?) {
+        model.commitFocus = sha.flatMap { sha in model.layer?.commits.first { $0.sha == sha } }
+        publishLayer()
+        guard let focus = model.commitFocus, var layer = model.layer,
+              let index = layer.commits.firstIndex(where: { $0.sha == focus.sha }) else { return }
+        let count = max(1, layer.commits.count)
+        layer.files = layer.files.enumerated().filter { $0.offset % count == index }.map(\.element)
+        layer.threads = []
+        layer.commentsAllowed = false
+        layer.layerID = -(layer.layerID * 10_000 + index + 1)
+        model.layer = layer
+    }
+
     func closeStacks(_ stackIDs: [Int]) {
         closedStacks.formUnion(stackIDs)
         if let selection = model.selection, closedStacks.contains(selection.stackID) {

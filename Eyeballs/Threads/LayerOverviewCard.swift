@@ -38,10 +38,12 @@ struct LayerOverviewCard: View {
                     buildsOn
                 }
                 Spacer(minLength: 12)
-                Button(action: actions.commentOnLayer) {
-                    Label("Comment on layer", systemImage: "text.bubble")
+                if content.commentsAllowed {
+                    Button(action: actions.commentOnLayer) {
+                        Label("Comment on layer", systemImage: "text.bubble")
+                    }
+                    .help("Start a thread about this whole layer")
                 }
-                .help("Start a thread about this whole layer")
             }
 
             if hasNoChanges {

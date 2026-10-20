@@ -22,6 +22,7 @@ final class LiveReviewBackend: ReviewBackend, ReviewServiceObserver {
     private var newestRevisions: [Int: ReviewService.NewestRevision] = [:]
     private var content: ReviewService.StackContent?
     private var loadedDiff: (layerID: Int, revisionID: Int?, diff: LayerDiff)?
+    private var commitFiles: [String: [FileItem]] = [:]
     private var liveStreams: [LiveStream] = []
     /// A banner about one stack, cleared when you move to another.
     private var bannerStack: Int?
@@ -50,6 +51,7 @@ final class LiveReviewBackend: ReviewBackend, ReviewServiceObserver {
             model.banner = nil
             bannerStack = nil
         }
+        if selection.layerID != model.selection?.layerID { model.commitFocus = nil }
         model.selection = selection
         if viewing[selection.stackID] == nil { viewing[selection.stackID] = newestRevisions[selection.stackID]?.id }
         if model.layer?.layerID != selection.layerID { model.layer = nil }
@@ -139,6 +141,12 @@ final class LiveReviewBackend: ReviewBackend, ReviewServiceObserver {
                 self.model.errorMessage = Self.message(for: error)
             }
         }
+    }
+
+    func focusCommit(_ sha: String?) {
+        model.commitFocus = sha.flatMap { sha in model.layer?.commits.first { $0.sha == sha } }
+        model.isLoadingLayer = true
+        enqueue { await self.refreshSelection() }
     }
 
     func closeStacks(_ stackIDs: [Int]) {
@@ -265,8 +273,21 @@ final class LiveReviewBackend: ReviewBackend, ReviewServiceObserver {
                 guard model.selection == selection else { return }
                 loadedDiff = diff.map { (selection.layerID, revision, $0) }
             }
+            let commits = diff?.commits ?? []
+            if let focus = model.commitFocus, let index = commits.firstIndex(where: { $0.sha == focus.sha }) {
+                if commitFiles[focus.sha] == nil {
+                    commitFiles[focus.sha] = try await service.commitFiles(stackID: selection.stackID, sha: focus.sha)
+                }
+                guard model.selection == selection, model.commitFocus?.sha == focus.sha else { return }
+                model.isLoadingLayer = false
+                // Its own layer ID keeps the commit view's folds and Viewed marks apart from the layer's.
+                model.layer = LayerContent(layerID: -(selection.layerID * 10_000 + index + 1), commits: commits,
+                                           files: commitFiles[focus.sha] ?? [], threads: [], commentsAllowed: false)
+                return
+            }
+            model.commitFocus = nil
             model.isLoadingLayer = false
-            model.layer = LayerContent(layerID: selection.layerID, commits: diff?.commits ?? [], files: diff?.files ?? [],
+            model.layer = LayerContent(layerID: selection.layerID, commits: commits, files: diff?.files ?? [],
                                        threads: content.threadsByLayer[selection.layerID] ?? [])
         } catch {
             guard model.selection == selection else { return }

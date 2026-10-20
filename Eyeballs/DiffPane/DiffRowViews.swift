@@ -99,6 +99,7 @@ final class FileHeaderView: NSView {
         commentButton.setAccessibilityLabel("Comment on file")
         threadsLabel.stringValue = content.threadCount == 1 ? "1 thread" : "\(content.threadCount) threads"
         viewedBox.state = content.isViewed ? .on : .off
+        commentButton.isHidden = !content.commentsAllowed
         viewedBox.setAccessibilityLabel("Viewed \((content.path as NSString).lastPathComponent)")
 
         setAccessibilityElement(true)
