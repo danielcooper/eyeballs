@@ -86,11 +86,18 @@ swiftc -O Tools/MakeIcon.swift -o /tmp/makeicon && /tmp/makeicon Eyeballs/Media.
 
 ### Releases
 
-Every push to `main` is built by GitHub Actions, and the app is attached to the workflow run. Pushing a version tag builds it and publishes a GitHub release:
+Every push to `main` is built by GitHub Actions, and the app is attached to the workflow run. Pushing a version tag builds it and publishes a GitHub release.
+
+Before you tag a release:
+
+1. Add the release to `CHANGELOG.md`.
+2. Set the new version as `MARKETING_VERSION` in `project.yml` and as `version` in `plugin/.claude-plugin/plugin.json`. The build fails if the plugin's version doesn't match the tag.
+
+Then tag and push:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 Builds aren't signed with an Apple Developer ID or notarised, so macOS blocks the first launch. Open **System Settings → Privacy & Security** and click **Open Anyway**, or run:
