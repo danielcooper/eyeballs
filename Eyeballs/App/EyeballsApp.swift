@@ -105,10 +105,30 @@ struct ReviewCommands: Commands {
                 .keyboardShortcut(.return, modifiers: [.command, .shift])
                 .disabled(model.selectedStack == nil)
             Button("Copy Agent Prompt") { model.copyAgentPrompt() }
+            Divider()
+            Button("Close Stack") { if let stack = model.selectedStack { model.closeStacks([stack.id]) } }
+                .keyboardShortcut("w", modifiers: [.command, .option])
+                .disabled(model.selectedStack == nil)
+            Button("Close All Stacks…") { Self.confirmCloseAll(model) }
+                .keyboardShortcut("w", modifiers: [.command, .option, .shift])
+                .disabled(model.repositories.isEmpty)
         }
         CommandGroup(after: .help) {
             KeyboardShortcutsMenuItem()
         }
+    }
+
+    /// Asks first, because closing every stack empties the window at once.
+    @MainActor
+    static func confirmCloseAll(_ model: ReviewWindowModel) {
+        let ids = model.allStackIDs
+        guard !ids.isEmpty else { return }
+        let alert = NSAlert()
+        alert.messageText = ids.count == 1 ? "Close the stack in Eyeballs?" : "Close all \(ids.count) stacks in Eyeballs?"
+        alert.informativeText = "They leave the window, and their comments stay saved. An agent waiting on one is told it closed. When an agent opens the same branches again, they come back as a new stack."
+        alert.addButton(withTitle: "Close All")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn { model.closeStacks(ids) }
     }
 
     private func title(forLayerAt position: Int) -> String {

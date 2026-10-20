@@ -141,6 +141,21 @@ final class LiveReviewBackend: ReviewBackend, ReviewServiceObserver {
         }
     }
 
+    func closeStacks(_ stackIDs: [Int]) {
+        let closing = Set(stackIDs)
+        model.repositories = model.repositories.compactMap { repository in
+            var repository = repository
+            repository.stacks.removeAll { closing.contains($0.id) }
+            return repository.stacks.isEmpty ? nil : repository
+        }
+        if let selection = model.selection, closing.contains(selection.stackID) {
+            model.selection = nil
+            model.layer = nil
+            model.banner = nil
+        }
+        perform { try await self.service.closeStacks(stackIDs) }
+    }
+
     func acceptBanner() {
         model.banner = nil
         bannerStack = nil

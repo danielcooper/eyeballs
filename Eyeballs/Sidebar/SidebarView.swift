@@ -24,11 +24,17 @@ struct SidebarView: View {
                             if foldedStacks.contains(stack.id) { foldedStacks.remove(stack.id) } else { foldedStacks.insert(stack.id) }
                         } askToRestack: { layer in
                             windowState.askToRestack(layer, in: model)
+                        } close: {
+                            model.closeStacks([stack.id])
                         }
                     }
                 } header: {
                     Label(repository.name, systemImage: "folder")
                         .help(repository.path)
+                        .contextMenu {
+                            Button("Close \(repository.name)") { model.closeStacks(repository.stacks.map(\.id)) }
+                            Button("Close All Stacks") { ReviewCommands.confirmCloseAll(model) }
+                        }
                 }
             }
         }
@@ -62,6 +68,7 @@ private struct StackRows: View {
     let isFolded: Bool
     let toggleFolded: () -> Void
     let askToRestack: (LayerItem) -> Void
+    let close: () -> Void
 
     /// The badge is the sum of the layer rows' "need you" counts, so the two always agree.
     private var needsYou: Int { stack.layers.reduce(0) { $0 + $1.needsYouCount } }
@@ -69,6 +76,9 @@ private struct StackRows: View {
     var body: some View {
         header
             .selectionDisabled()
+            .contextMenu {
+                Button("Close Stack", action: close)
+            }
         if !isFolded {
             ForEach(stack.layers.sorted { $0.position > $1.position }, id: \.sidebarID) { layer in
                 LayerRow(layer: layer, parentBranch: parentBranch(of: layer), agentName: agentName) {

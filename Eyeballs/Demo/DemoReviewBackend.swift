@@ -8,6 +8,7 @@ import AppKit
 /// replies to two threads, one addressed and one with a question.
 @MainActor
 final class DemoReviewBackend: ReviewBackend {
+    private var closedStacks: Set<Int> = []
     private let model: ReviewWindowModel
     private var state: DemoState
     /// How long the pretend agent takes to read a review and reply.
@@ -126,6 +127,15 @@ final class DemoReviewBackend: ReviewBackend {
         publishRepositories()
     }
 
+    func closeStacks(_ stackIDs: [Int]) {
+        closedStacks.formUnion(stackIDs)
+        if let selection = model.selection, closedStacks.contains(selection.stackID) {
+            model.selection = nil
+            model.layer = nil
+        }
+        publishRepositories()
+    }
+
     func acceptBanner() {
         model.banner = nil
         state.stack.revision = (state.stack.revision ?? 0) + 1
@@ -223,7 +233,11 @@ final class DemoReviewBackend: ReviewBackend {
         stack.needsYouCount = state.threads.filter { $0.derivedState.needsYou }.count
         var repository = state.repository
         repository.stacks = [stack]
-        model.repositories = [repository] + state.extraRepositories
+        model.repositories = ([repository] + state.extraRepositories).compactMap { repository in
+            var repository = repository
+            repository.stacks.removeAll { closedStacks.contains($0.id) }
+            return repository.stacks.isEmpty && repository.id == state.repository.id ? nil : repository
+        }
         model.review = PendingReview(
             pendingCommentCount: state.threads.reduce(0) { $0 + $1.comments.filter(\.isPending).count },
             summary: state.drafts[.reviewSummary] ?? "",

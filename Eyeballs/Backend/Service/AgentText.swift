@@ -23,6 +23,11 @@ enum AgentEvents {
         return make(WaitEvent(event: .commentSent, stack: StackID(stack), threads: 1, next: .runInbox), text: text, stack: stack)
     }
 
+    static func stackClosed(stack: Int, label: String, reviewer: ReviewerName) -> StreamEvent {
+        let text = "eyeballs: \(reviewer.startingSentence) closed \(label) in Eyeballs. Stop working on its review."
+        return make(WaitEvent(event: .stackClosed, stack: StackID(stack), next: .stop), text: text, stack: stack)
+    }
+
     static func rebound(stack: Int, label: String) -> StreamEvent {
         let text = "eyeballs: Another session now drives \(label). Stop, or run eyeballs attach."
         return make(WaitEvent(event: .rebound, stack: StackID(stack), next: .stop), text: text, stack: stack)

@@ -202,6 +202,9 @@ extension ReviewService {
     /// The event for something `inbox` has not shown yet: a submitted review, or a sent comment.
     func pendingEvent(_ stack: StackRecord) async throws -> StreamEvent? {
         let facts = try facts(stack.id)
+        if stack.state == .archived {
+            return AgentEvents.stackClosed(stack: stack.id, label: stackLabel(stack), reviewer: await reviewerName(for: facts.repo))
+        }
         let revision = facts.latestRevision?.number ?? 0
         if let review = facts.reviews.last(where: { $0.status == .submitted }) {
             return AgentEvents.reviewSubmitted(

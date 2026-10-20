@@ -46,6 +46,9 @@ final class ReviewWindowModel {
     func copyAgentPrompt() { backend?.copyAgentPrompt() }
     func openRepository(at url: URL) { backend?.openRepository(at: url) }
     func acceptBanner() { backend?.acceptBanner() }
+    func closeStacks(_ stackIDs: [Int]) { backend?.closeStacks(stackIDs) }
+
+    var allStackIDs: [Int] { repositories.flatMap(\.stacks).map(\.id) }
 }
 
 /// Does the work behind the window. The real one uses the store, git and the agent socket;
@@ -67,6 +70,8 @@ protocol ReviewBackend: AnyObject {
     func copyAgentPrompt()
     func openRepository(at url: URL)
     func acceptBanner()
+    /// Takes stacks out of the window. Their history stays in the store.
+    func closeStacks(_ stackIDs: [Int])
 }
 
 // MARK: Sidebar

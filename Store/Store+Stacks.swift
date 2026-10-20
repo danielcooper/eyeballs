@@ -108,6 +108,15 @@ extension Store {
     }
 
     /// Makes `sessionID` the agent session that gets the stack's wake-ups.
+    /// Archives a stack you are done with. Its history stays; it just leaves the sidebar, and a
+    /// later `eyeballs review` of its branches starts a new stack.
+    public func archiveStack(stackID: Int) throws {
+        let now = clock().databaseMilliseconds
+        try pool.write { db in
+            try db.execute(sql: "UPDATE stack SET state = 'archived', ended_at = ? WHERE id = ? AND state = 'active'", arguments: [now, stackID])
+        }
+    }
+
     public func setDriver(stackID: Int, sessionID: Int) throws {
         try pool.write { db in
             _ = try update(StackRecord.self, db, id: stackID, set: "driver_session = ?", arguments: [sessionID])

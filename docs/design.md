@@ -993,7 +993,7 @@ Single-letter shortcuts fire only when the table itself has keyboard focus, neve
 
 - **Eyeballs menu:** Install Command Line Tool…, and Open at Login ([`SMAppService.mainApp`](https://developer.apple.com/documentation/servicemanagement/smappservice)).
 - **File menu:** Open Repository… (`⌘O`).
-- **Review menu:** Submit Review, End Review, Take Snapshot, Copy Agent Prompt. End Review archives the stack, and a waiting CLI gets `stack.closed`.
+- **Review menu:** Finish Review, Copy Agent Prompt, Close Stack (⌥⌘W) and Close All Stacks… (⇧⌥⌘W, after a confirmation). Closing archives a stack: it leaves the sidebar, its history stays in the store, its driver's `wait` and `watch` get `stack.closed`, and a later `eyeballs review` of the same branches starts a new stack. The sidebar's stack and repository headers offer the same in their context menus. Take Snapshot arrives later.
 - **Notifications** use `UNUserNotificationCenter`, from PR 11:
   - **Question:** one notification at once per `reply` call that holds a question.
   - **Summary:** one when the agent has replied to every thread in a review, or when a new revision arrives.

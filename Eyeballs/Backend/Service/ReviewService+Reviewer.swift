@@ -351,6 +351,22 @@ extension ReviewService {
         }
     }
 
+    /// Closes stacks you are done with: they leave the window, their history stays, and an agent
+    /// waiting on one is told it closed.
+    func closeStacks(_ stackIDs: [Int]) async throws {
+        try await oneAtATime.run {
+            for stackID in stackIDs {
+                guard let facts = try? self.facts(stackID), facts.stack.state == .active else { continue }
+                try self.store.archiveStack(stackID: stackID)
+                if let driver = facts.driver {
+                    let event = AgentEvents.stackClosed(stack: stackID, label: self.stackLabel(facts.stack), reviewer: await self.reviewerName(for: facts.repo))
+                    self.broadcast(event, to: Self.listener(for: driver))
+                }
+                self.notify(.stack(stackID))
+            }
+        }
+    }
+
     // MARK: Waking the agent
 
     private func portThread(_ threadID: Int, stackID: Int, to revision: RevisionRecord) async throws {
