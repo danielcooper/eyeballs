@@ -2,7 +2,7 @@
 
 This file lists the changes in each release of Eyeballs, newest first.
 
-## Unreleased
+## 0.3.0 - 2026-11-05
 
 ### Added
 
