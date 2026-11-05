@@ -66,6 +66,7 @@ final class UISelfTest {
         await checkViewedLapsesWhenTheDiffChanges()
         await checkNeedsYouCrossesLayers()
         await checkFinishReviewNeverSendsByItself()
+        await checkFindMovesThroughEveryMatch()
     }
 
     // MARK: Checks
@@ -155,6 +156,10 @@ final class UISelfTest {
         if !has("Next Thread", "]", [.command, .option]) || !has("Previous Thread", "[", [.command, .option]) { missing.append("⌥⌘] and ⌥⌘[") }
         if !has("Next Thread That Needs You", "a", [.command, .shift]) { missing.append("⇧⌘A") }
         if !has("Keyboard Shortcuts", "/", .command) { missing.append("⌘/") }
+        if !has("Find…", "f", .command) || !has("Find Next", "g", .command) || !has("Find Previous", "g", [.command, .shift]) {
+            missing.append("⌘F, ⌘G and ⇧⌘G")
+        }
+        if !has("Use Selection for Find", "e", .command) { missing.append("⌘E") }
 
         model.selectLayer(atPosition: 1)
         await window.settle()
@@ -720,6 +725,106 @@ final class UISelfTest {
         session.windowState.isFinishingReview = false
         await window.settle()
         record("finish_review_never_sends_by_itself", ["popover_opened": opened, "sent": sent, "pass": opened && !sent])
+    }
+
+    /// ⌘F puts the cursor in the find field. Typing counts every match in the layer, a folded
+    /// file's too. Return walks through them all and wraps, opening the folded file on the way;
+    /// ⇧Return steps back. Esc closes find with the line cursor on the match, and ⌘G opens it again.
+    private func checkFindMovesThroughEveryMatch() async {
+        let query = "attempt"
+        model.selectLayer(atPosition: 2)
+        await window.settle(400)
+        guard let layer = model.layer else { return record("find_moves_through_every_match", ["pass": false, "reason": "no layer"]) }
+        for file in layer.files where !file.isBinary {
+            pane.setFile(file.path, collapsed: false)
+            pane.loadBigFile(file.path)
+        }
+        var expected = 0
+        var pathsWithMatches: [String] = []
+        for row in pane.rows {
+            guard let code = row.code else { continue }
+            let count = code.displayText.lowercased().components(separatedBy: query).count - 1
+            expected += count
+            if count > 0, !pathsWithMatches.contains(code.path) { pathsWithMatches.append(code.path) }
+        }
+        guard pathsWithMatches.count >= 2, let folded = pathsWithMatches.last else {
+            return record("find_moves_through_every_match", ["pass": false, "reason": "the layer needs matches in two files"])
+        }
+        pane.setViewed(true, path: folded)
+        pane.scroll(toY: 0)
+        await window.settle()
+
+        performMenuKey("f", modifiers: .command, keyCode: 3)
+        await window.settle()
+        let fieldFocused = ((window.firstResponder as? NSText)?.delegate as? FindSearchField) != nil
+        type(query)
+        await window.settle()
+        let status = session.windowState.findStatus
+        var problems: [String] = []
+        if session.windowState.findText != query { problems.append("typing in the field searched for \(session.windowState.findText)") }
+        if status.count != expected { problems.append("found \(status.count) of \(expected) matches") }
+
+        var visited: [Int] = []
+        var openedFolded = false
+        for _ in 0..<expected {
+            guard let current = pane.find.currentMatch else { break }
+            visited.append(pane.find.current ?? -1)
+            if !isShownInFull(current.row) { problems.append("match \(visited.count) is not in view") }
+            if !pane.find.highlights(in: current.row).contains(where: \.isCurrent) { problems.append("match \(visited.count) is not highlighted") }
+            if path(of: current.row) == folded { openedFolded = true }
+            await post(keyCode: 36, characters: "\r", modifiers: [])
+        }
+        if visited != Array(0..<expected) { problems.append("Return visited \(visited)") }
+        if pane.find.current != 0 { problems.append("Return did not wrap to the first match") }
+        await post(keyCode: 36, characters: "\r", modifiers: .shift)
+        if pane.find.current != expected - 1 { problems.append("⇧Return went to \(pane.find.current ?? -1), not back to the last match") }
+
+        let landed = pane.find.currentMatch
+        await post(keyCode: 53, characters: "\u{1B}", modifiers: [])
+        let closed = !session.windowState.isFindBarShown && window.firstResponder === table && pane.find.matches.isEmpty
+        let cursorOnMatch = landed.map { pane.lineSelection?.path == path(of: $0.row) && pane.isLineSelected($0.row) } ?? false
+
+        performMenuKey("g", modifiers: .command, keyCode: 5)
+        await window.settle()
+        let reopened = session.windowState.isFindBarShown && pane.find.current != nil
+        pane.closeFind()
+        pane.setViewed(false, path: folded)
+        pane.clearSelections()
+        record("find_moves_through_every_match", [
+            "field_focused": fieldFocused, "matches": status.count, "expected": expected, "opened_folded_file": openedFolded,
+            "closed": closed, "cursor_on_match": cursorOnMatch, "command_g_reopens": reopened, "problems": problems,
+            "pass": fieldFocused && openedFolded && closed && cursorOnMatch && reopened && problems.isEmpty,
+        ])
+    }
+
+    private func path(of row: RowID) -> String? {
+        if case .line(let path, _, _) = row { path } else { nil }
+    }
+
+    private func isShownInFull(_ id: RowID) -> Bool {
+        guard let index = pane.indexByID[id] else { return false }
+        let rect = table.rect(ofRow: index)
+        let visible = pane.visibleRect
+        return rect.minY >= visible.minY + pane.stickyHeaderHeight(above: index) - 0.5 && rect.maxY <= visible.maxY + 0.5
+    }
+
+    private func performMenuKey(_ key: String, modifiers: NSEvent.ModifierFlags, keyCode: UInt16) {
+        guard let event = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key,
+            isARepeat: false, keyCode: keyCode) else { return }
+        _ = NSApp.mainMenu?.performKeyEquivalent(with: event)
+    }
+
+    /// Sends a key through the app's event queue, so `NSApp.currentEvent` is the key, as it is
+    /// when you press it.
+    private func post(keyCode: UInt16, characters: String, modifiers: NSEvent.ModifierFlags) async {
+        guard let event = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber, context: nil, characters: characters,
+            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode) else { return }
+        NSApp.postEvent(event, atStart: false)
+        await window.settle()
     }
 
     private func press(keyCode: UInt16, characters: String, modifiers: NSEvent.ModifierFlags) {

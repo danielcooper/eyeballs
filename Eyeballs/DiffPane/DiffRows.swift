@@ -316,6 +316,11 @@ struct DiffRowBuilder {
         return rows
     }
 
+    /// The code rows of every text file, in diff order, as if each file were open and loaded.
+    func searchableLines() -> [CodeRowContent] {
+        prepared.files.filter { !$0.file.isBinary }.flatMap { lineRows(for: $0).compactMap(\.code) }
+    }
+
     private var footer: FooterContent {
         let position = layerItem?.position ?? 0
         let layers = stack?.layers ?? []

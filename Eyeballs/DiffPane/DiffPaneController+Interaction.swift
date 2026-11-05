@@ -649,7 +649,7 @@ extension DiffPaneController {
         return NSRange(location: lower, length: max(0, upper - lower))
     }
 
-    private func orderedTextSelection() -> (start: (index: Int, offset: Int), end: (index: Int, offset: Int))? {
+    func orderedTextSelection() -> (start: (index: Int, offset: Int), end: (index: Int, offset: Int))? {
         guard let selection = textSelection,
               let anchorIndex = indexByID[selection.anchor.row], let headIndex = indexByID[selection.head.row] else { return nil }
         let anchor = (index: anchorIndex, offset: selection.anchor.offset)
@@ -884,7 +884,7 @@ extension DiffPaneController {
     }
 
     /// The first row whose top is at or below the bottom of the floating header.
-    private func firstRowBelowHeader() -> Int {
+    func firstRowBelowHeader() -> Int {
         let range = tableView.rows(in: visibleRect)
         guard range.length > 0 else { return 0 }
         for index in range.location..<range.location + range.length {

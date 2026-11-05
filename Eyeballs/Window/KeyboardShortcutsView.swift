@@ -43,6 +43,13 @@ struct KeyboardShortcutsView: View {
             Shortcut(keys: ["⌘1", "⌘9"], action: "Go to layer 1 to 9", joiner: "to"),
             Shortcut(keys: ["⇧⌘↩"], action: "Finish review"),
             Shortcut(keys: ["⌘C"], action: "Copy the selected code"),
+            Shortcut(keys: ["⌘F"], action: "Find in this layer"),
+            Shortcut(keys: ["⌘G", "⇧⌘G"], action: "Next or previous match"),
+            Shortcut(keys: ["⌘E"], action: "Find the selected code"),
+        ]),
+        Group(title: "In the find bar", note: nil, shortcuts: [
+            Shortcut(keys: ["↩", "⇧↩"], action: "Next or previous match"),
+            Shortcut(keys: ["Esc"], action: "Close, with the line cursor on the match"),
         ]),
         Group(title: "In a comment box", note: nil, shortcuts: [
             Shortcut(keys: ["⌘↩"], action: "Add to review"),

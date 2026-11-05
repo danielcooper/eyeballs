@@ -39,6 +39,14 @@ final class CodeRowView: NSView {
             let color = content.line.kind == .added ? DiffColors.addedWord : DiffColors.deletedWord
             fill(range: changed, in: layout, text: content.displayText, metrics: metrics, color: color, rounded: true)
         }
+        for highlight in pane.find.highlights(in: rowID) {
+            if highlight.isCurrent {
+                fill(range: highlight.range, in: layout, text: content.displayText, metrics: metrics,
+                     color: DiffColors.currentFindMatch, rounded: true, outline: DiffColors.currentFindOutline)
+            } else {
+                fill(range: highlight.range, in: layout, text: content.displayText, metrics: metrics, color: DiffColors.findMatch, rounded: true)
+            }
+        }
         if let selected = pane.selectedCharacters(in: rowID), selected.length > 0 {
             let color = pane.isTableFocused ? NSColor.selectedTextBackgroundColor : NSColor.unemphasizedSelectedTextBackgroundColor
             fill(range: selected, in: layout, text: content.displayText, metrics: metrics, color: color, rounded: false)
@@ -122,7 +130,8 @@ final class CodeRowView: NSView {
         NSRect(x: 2 * metrics.numberColumnWidth + 1, y: 1, width: 18, height: metrics.lineHeight - 2)
     }
 
-    private func fill(range: NSRange, in layout: CodeLineLayout, text: String, metrics: CodeMetrics, color: NSColor, rounded: Bool) {
+    private func fill(range: NSRange, in layout: CodeLineLayout, text: String, metrics: CodeMetrics, color: NSColor, rounded: Bool,
+                      outline: NSColor? = nil) {
         color.setFill()
         for (index, line) in layout.lines.enumerated() {
             let start = max(range.location, line.location)
@@ -132,7 +141,13 @@ final class CodeRowView: NSView {
             let x1 = metrics.x(ofOffset: end, line: index, in: layout, text: text)
             let rect = NSRect(x: x0, y: CGFloat(index) * metrics.lineHeight, width: max(1, x1 - x0), height: metrics.lineHeight)
             if rounded {
-                NSBezierPath(roundedRect: rect.insetBy(dx: 0, dy: 1), xRadius: 2, yRadius: 2).fill()
+                let path = NSBezierPath(roundedRect: rect.insetBy(dx: 0, dy: 1), xRadius: 2, yRadius: 2)
+                path.fill()
+                if let outline {
+                    outline.setStroke()
+                    path.lineWidth = 1
+                    path.stroke()
+                }
             } else {
                 rect.fill()
             }

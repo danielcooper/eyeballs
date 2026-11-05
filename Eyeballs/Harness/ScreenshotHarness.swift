@@ -126,6 +126,7 @@ final class ScreenshotHarness {
 
         await shootThreadNotes(window)
         await shootViewedAndFooter(window)
+        await shootFind(window)
 
         if let webUI = model.selectedStack?.layers.first(where: { $0.position == 3 }) {
             windowState.askToRestack(webUI, in: model)
@@ -201,6 +202,20 @@ final class ScreenshotHarness {
         await shoot("24-thread-not-in-this-diff", window)
         model.layer = shown
         await window.settle()
+    }
+
+    /// The find bar on the api-client layer, part way through the matches of "attempt".
+    private func shootFind(_ window: HarnessWindow) async {
+        model.selectLayer(atPosition: 2)
+        await window.settle(400)
+        pane?.scroll(toY: 0)
+        pane?.showFind()
+        pane?.findTextDidChange("attempt")
+        pane?.moveFindMatch(by: 1)
+        await window.settle()
+        await shoot("35-find-bar", window)
+        pane?.closeFind()
+        pane?.clearSelections()
     }
 
     private func shootViewedAndFooter(_ window: HarnessWindow) async {

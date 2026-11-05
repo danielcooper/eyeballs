@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The right-hand column: news in a row of its own at the top, the diff pane or its empty and
-/// loading states, and the review bar along the bottom.
+/// The right-hand column: news in a row of its own at the top, then the find bar while it is
+/// open, the diff pane or its empty and loading states, and the review bar along the bottom.
 struct DetailColumn: View {
     let model: ReviewWindowModel
     let windowState: ReviewWindowState
@@ -9,6 +9,9 @@ struct DetailColumn: View {
     var body: some View {
         VStack(spacing: 0) {
             notices
+            if windowState.isFindBarShown, model.selection != nil {
+                FindBar(windowState: windowState)
+            }
             ZStack(alignment: .top) {
                 DiffPaneView(model: model, windowState: windowState, layer: model.layer,
                              layerItem: model.selectedLayer, stack: model.selectedStack,

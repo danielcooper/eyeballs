@@ -28,6 +28,10 @@ enum DiffColors {
     static let selectedLine = adaptive(light: rgba(212, 167, 44, 0.18), dark: rgba(210, 153, 34, 0.15))
     static let selectedBar = adaptive(light: rgb(0xBF8700), dark: rgb(0xD29922))
 
+    static let findMatch = adaptive(light: rgba(255, 214, 51, 0.35), dark: rgba(210, 153, 34, 0.28))
+    static let currentFindMatch = adaptive(light: rgb(0xFFC83D), dark: rgba(255, 200, 40, 0.50))
+    static let currentFindOutline = adaptive(light: rgb(0xBF8700), dark: rgb(0xE3B341))
+
     /// "Needs you" words. The light orange is dark enough for 4.5:1 on the sidebar and on its
     /// grey selection; system orange there is about 2:1.
     static let needsYouText = adaptive(light: rgb(0x944A00), dark: rgb(0xFF9F0A))

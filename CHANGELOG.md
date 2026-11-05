@@ -2,6 +2,12 @@
 
 This file lists the changes in each release of Eyeballs, newest first.
 
+## Unreleased
+
+### Added
+
+- **Find in the diff.** Press ⌘F to search the code of the layer you are reviewing. Return and ⇧Return, or ⌘G and ⇧⌘G, move through the matches. Find also searches files you folded as viewed and big files you have not loaded, and opens them when it lands on a match. Close find with Esc and the line cursor stays on the match, so `c` comments on it. ⌘E searches for the code you selected.
+
 ## 0.2.0 - 2026-10-20
 
 ### Added

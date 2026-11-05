@@ -2,7 +2,8 @@ import Foundation
 import Observation
 
 /// What the window's columns share that is not review data: the middle column's tab, the
-/// review being finished, the files you marked viewed, and a way to ask the diff pane to scroll.
+/// review being finished, the files you marked viewed, the find bar, and a way to ask the diff
+/// pane to scroll.
 @MainActor
 @Observable
 final class ReviewWindowState {
@@ -24,6 +25,10 @@ final class ReviewWindowState {
     /// Files you ticked Viewed, by layer ID, with the diff they had then. A file whose diff
     /// changes since is no longer viewed. The marks are saved per stack in `viewedMarksStore`.
     private(set) var viewedFiles: ViewedMarks = [:]
+    var isFindBarShown = false
+    /// What you last searched for. It stays when the find bar closes, so ⌘F or ⌘G picks it up again.
+    var findText = ""
+    var findStatus = FindStatus()
 
     @ObservationIgnored weak var pane: DiffPaneController?
     /// Nil keeps Viewed marks in memory only, as screenshot and self-test runs do.
@@ -37,6 +42,8 @@ final class ReviewWindowState {
     @ObservationIgnored var layerCommentToOpenAfterLoad: PendingLayerComment?
     @ObservationIgnored private var summarySave: Task<Void, Never>?
     @ObservationIgnored private var loadedSummaryForStack: Int?
+    @ObservationIgnored private weak var findField: FindSearchField?
+    @ObservationIgnored private var findFieldWantsFocus = false
 
     func revealFile(_ path: String) { pane?.revealFile(path) }
     func revealThread(_ id: Int) { pane?.revealThread(id) }
@@ -84,6 +91,24 @@ final class ReviewWindowState {
     func adjacentLayer(_ offset: Int, in model: ReviewWindowModel) -> LayerItem? {
         guard let layer = model.selectedLayer, let stack = model.selectedStack else { return nil }
         return stack.layers.first { $0.position == layer.position + offset }
+    }
+
+    // MARK: Find
+
+    /// Puts the cursor in the find field: now when the field shows, or as soon as it does.
+    func focusFindField() {
+        if let findField, findField.window != nil {
+            findField.focus()
+        } else {
+            findFieldWantsFocus = true
+        }
+    }
+
+    func findFieldDidAppear(_ field: FindSearchField) {
+        findField = field
+        guard findFieldWantsFocus else { return }
+        findFieldWantsFocus = false
+        field.focus()
     }
 
     // MARK: Viewed files

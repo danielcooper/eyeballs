@@ -54,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// The File, Stack, Go and Review menu items, with the window's keyboard shortcuts.
+/// The File, Edit > Find, Stack, Go and Review menu items, with the window's keyboard shortcuts.
 ///
 /// The pane's single-letter keys only work while the diff has focus, so every one that moves
 /// you around also has a menu item here with a modifier shortcut that works from anywhere.
@@ -71,6 +71,19 @@ struct ReviewCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("Open Repository…") { RepositoryPicker.choose(for: model) }
                 .keyboardShortcut("o")
+        }
+        CommandGroup(after: .textEditing) {
+            Menu("Find") {
+                Button("Find…") { pane?.showFind() }
+                    .keyboardShortcut("f")
+                Button("Find Next") { pane?.moveFindMatch(by: 1) }
+                    .keyboardShortcut("g")
+                Button("Find Previous") { pane?.moveFindMatch(by: -1) }
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
+                Button("Use Selection for Find") { pane?.useSelectionForFind() }
+                    .keyboardShortcut("e")
+            }
+            .disabled(model.selection == nil)
         }
         CommandMenu("Stack") {
             ForEach(1...9, id: \.self) { position in

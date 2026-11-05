@@ -18,8 +18,10 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
     private(set) var indexByID: [RowID: Int] = [:]
     private(set) var fileHeaderRows: [Int] = []
     private(set) var shownLayerID: Int?
-    private var shownLayer: LayerContent?
-    private var prepared = PreparedLayer(files: [])
+    private(set) var shownLayer: LayerContent?
+    private(set) var prepared = PreparedLayer(files: [])
+    /// Goes up each time the shown files change, so find knows to search again.
+    private(set) var filesVersion = 0
     private var viewStates: [Int: LayerViewState] = [:]
     private var widthUsedForHeights: CGFloat = 0
     private var refreshIsScheduled = false
@@ -30,6 +32,7 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
     private var overviewHeight: (content: OverviewContent, width: Int, height: CGFloat)?
     private var tokenCache: [RowID: [SyntaxToken]] = [:]
 
+    var find = DiffFind()
     var lineSelection: LineSelection?
     var textSelection: TextSelection?
     var dragMode = DragMode.none
@@ -115,6 +118,7 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
         var gutterChanged = false
         if layer.files != shownLayer?.files {
             prepared = PreparedLayer(files: layer.files)
+            filesVersion += 1
             tokenCache.removeAll()
             gutterChanged = metrics.fitNumbers(upTo: prepared.largestLineNumber)
             unfoldFilesNoLongerViewed(in: layer)
@@ -149,6 +153,7 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
         shownLayerID = layer.layerID
         shownLayer = layer
         prepared = PreparedLayer(files: layer.files)
+        filesVersion += 1
         metrics.fitNumbers(upTo: prepared.largestLineNumber)
         lineSelection = nil
         textSelection = nil
@@ -156,6 +161,7 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
         focusedThreadID = nil
         focusedRange = nil
         windowState.focusedThreadID = nil
+        find.current = nil
         tokenCache.removeAll()
         threadHeights.removeAll()
         widthUsedForHeights = tableView.bounds.width
@@ -170,6 +176,7 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
         } else {
             scroll(toY: 0)
         }
+        refreshFindIfNeeded()
         updateCurrentFile()
     }
 
@@ -189,6 +196,7 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
         heights = []
         reindex()
         tableView.reloadData()
+        refreshFindIfNeeded()
     }
 
     var viewState: LayerViewState {
@@ -213,6 +221,7 @@ final class DiffPaneController: NSViewController, NSTableViewDataSource, NSTable
     func rebuild() {
         guard shownLayer != nil else { return }
         apply(buildRows())
+        refreshFindIfNeeded()
     }
 
     private func apply(_ newRows: [DiffRow]) {
